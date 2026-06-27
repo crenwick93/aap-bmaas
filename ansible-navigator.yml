@@ -1,0 +1,9 @@
+---
+ansible-navigator:
+  playbook-artifact:
+    enable: false
+  execution-environment:
+    image: quay.io/crenwick93/bmaas-ee:latest
+    pull:
+      policy: missing
+  mode: stdout

@@ -6,11 +6,10 @@ dependencies:
     collections:
       - name: dellemc.openmanage
         version: ">=9.0.0,<10.0.0"
+      - name: ansible.posix
   python:
     - omsdk
-  system:
-    - gcc [platform:rpm]
-    - python3.11-devel [platform:rpm]
+  system: []
 
 options:
   package_manager_path: /usr/bin/microdnf
@@ -19,5 +18,6 @@ images:
   base_image:
     name: registry.redhat.io/ansible-automation-platform-25/ee-minimal-rhel9:latest
 
-build_arg_defaults:
-  ANSIBLE_GALAXY_CLI_COLLECTION_OPTS: "--pre"
+additional_build_steps:
+  append_galaxy:
+    - RUN truncate -s 0 /usr/share/ansible/collections/ansible_collections/dellemc/openmanage/bindep.txt || true

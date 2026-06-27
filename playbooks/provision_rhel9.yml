@@ -3,7 +3,7 @@
   hosts: idrac
   gather_facts: false
   vars_files:
-    - vault/idrac_secrets.yml
+    - ../vault/idrac_secrets.yml
   tasks:
     - name: Boot T620 to RHEL 9 unattended ISO over NFS
       dellemc.openmanage.idrac_os_deployment:

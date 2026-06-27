@@ -8,7 +8,7 @@
   vars:
     iso_dir: /srv/iso
     blueprint_name: rhel9-golden
-    blueprint_src: golden-image/blueprint.toml
+    blueprint_src: ../golden-image/blueprint.toml
     golden_iso: "{{ iso_dir }}/rhel9-golden.iso"
     ssh_pub_key_file: "{{ lookup('env', 'SSH_PUB_KEY_FILE') | default(lookup('env', 'HOME') ~ '/.ssh/id_rsa.pub', true) }}"
     ssh_pub_key: "{{ lookup('file', ssh_pub_key_file) }}"
@@ -104,7 +104,7 @@
     # ------------------------------------------------------------------
     - name: Create kickstart output directory
       ansible.builtin.file:
-        path: kickstart/generated
+        path: ../kickstart/generated
         state: directory
         mode: "0755"
 
@@ -114,8 +114,8 @@
   tasks:
     - name: Render kickstart for {{ inventory_hostname }}
       ansible.builtin.template:
-        src: kickstart/ks.cfg.j2
-        dest: "kickstart/generated/{{ inventory_hostname }}.cfg"
+        src: ../kickstart/ks.cfg.j2
+        dest: "../kickstart/generated/{{ inventory_hostname }}.cfg"
         mode: "0644"
       delegate_to: localhost
 
@@ -139,7 +139,7 @@
   tasks:
     - name: Build unattended ISO for each host
       ansible.builtin.command:
-        cmd: "mkksiso --ks kickstart/generated/{{ item }}.cfg {{ input_iso }} {{ iso_dir }}/{{ item }}-baremetal.iso"
+        cmd: "mkksiso --ks ../kickstart/generated/{{ item }}.cfg {{ input_iso }} {{ iso_dir }}/{{ item }}-baremetal.iso"
       loop: "{{ groups['servers'] }}"
       changed_when: true
 

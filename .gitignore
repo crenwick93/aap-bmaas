@@ -7,3 +7,6 @@ instructions
 kickstart/generated/
 vault/idrac_secrets.yml
 .ansible
+context/
+venv/
+ansible-navigator.log

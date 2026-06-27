@@ -120,7 +120,7 @@ controller_templates:
     organization: "Bare Metal Provisioning"
     job_type: "run"
     project: "Bare Metal Automation"
-    playbook: "provision_rhel9.yml"
+    playbook: "playbooks/provision_rhel9.yml"
     inventory: "iDRAC Management"
     execution_environment: "Bare Metal EE"
     credentials:
@@ -131,8 +131,9 @@ controller_templates:
     organization: "Bare Metal Provisioning"
     job_type: "run"
     project: "Bare Metal Automation"
-    playbook: "wait_for_install.yml"
+    playbook: "playbooks/wait_for_install.yml"
     inventory: "Bare Metal Hosts"
+    execution_environment: "Bare Metal EE"
     credentials:
       - "T620 SSH"
 
@@ -141,8 +142,9 @@ controller_templates:
     organization: "Bare Metal Provisioning"
     job_type: "run"
     project: "Bare Metal Automation"
-    playbook: "configure_rhel9.yml"
+    playbook: "playbooks/configure_rhel9.yml"
     inventory: "Bare Metal Hosts"
+    execution_environment: "Bare Metal EE"
     credentials:
       - "T620 SSH"
 
