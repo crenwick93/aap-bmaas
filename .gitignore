@@ -1,0 +1,7 @@
+.vault_pass
+*.iso
+__pycache__/
+*.retry
+instructions
+vault/idrac_secrets.yml
+.ansible

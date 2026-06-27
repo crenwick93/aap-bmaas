@@ -1,0 +1,21 @@
+---
+- name: Provision RHEL 9 on Dell T620 via iDRAC BootToNetworkISO
+  hosts: idrac
+  gather_facts: false
+  vars_files:
+    - vault/idrac_secrets.yml
+  tasks:
+    - name: Boot T620 to RHEL 9 unattended ISO over NFS
+      dellemc.openmanage.idrac_os_deployment:
+        idrac_ip: "{{ inventory_hostname }}"
+        idrac_user: "{{ idrac_user }}"
+        idrac_password: "{{ idrac_password }}"
+        validate_certs: false
+        share_name: "{{ iso_share }}"
+        iso_image: "{{ iso_image }}"
+        expose_duration: 60
+      register: osd_result
+
+    - name: Show deployment job result
+      ansible.builtin.debug:
+        var: osd_result
