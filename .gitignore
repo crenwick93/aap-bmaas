@@ -1,7 +1,9 @@
 .vault_pass
+.env
 *.iso
 __pycache__/
 *.retry
 instructions
+kickstart/generated/
 vault/idrac_secrets.yml
 .ansible

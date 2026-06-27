@@ -1,0 +1,18 @@
+# Per-host kickstart for {{ ks_hostname }} — generated from template.
+# Baseline config is baked into the golden image; this covers host-specific settings only.
+text
+eula --agreed
+
+rootpw --iscrypted {{ ks_root_password_hash }}
+
+{% if ks_ip is defined and ks_gateway is defined %}
+network --bootproto=static --ip={{ ks_ip }} --netmask={{ ks_netmask | default('255.255.255.0') }} --gateway={{ ks_gateway }} --nameserver={{ ks_dns | default('8.8.8.8') }} --device=link --activate --hostname={{ ks_hostname }}
+{% else %}
+network --bootproto=dhcp --device=link --activate --hostname={{ ks_hostname }}
+{% endif %}
+
+bootloader --location=mbr
+clearpart --all --initlabel
+autopart --type=lvm
+
+reboot

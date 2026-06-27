@@ -1,0 +1,203 @@
+---
+- name: Prepare environment — golden image, kickstarts, ISOs, and NFS
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+
+  vars:
+    iso_dir: /srv/iso
+    blueprint_name: rhel9-golden
+    blueprint_src: golden-image/blueprint.toml
+    golden_iso: "{{ iso_dir }}/rhel9-golden.iso"
+    ssh_pub_key_file: "{{ lookup('env', 'SSH_PUB_KEY_FILE') | default(lookup('env', 'HOME') ~ '/.ssh/id_rsa.pub', true) }}"
+    ssh_pub_key: "{{ lookup('file', ssh_pub_key_file) }}"
+    idrac_ip: "192.168.50.252"
+    input_iso: "{{ golden_iso if golden_image_build | default(true) else stock_iso }}"
+    stock_iso: "{{ lookup('env', 'STOCK_ISO') | default('rhel-9-x86_64-dvd.iso', true) }}"
+
+    # Set to false to skip the golden image build and use a stock RHEL 9 DVD instead
+    golden_image_build: true
+
+  tasks:
+    # ------------------------------------------------------------------
+    # 1. Install prerequisites
+    # ------------------------------------------------------------------
+    - name: Install required packages
+      ansible.builtin.dnf:
+        name:
+          - lorax
+          - nfs-utils
+          - firewalld
+          - osbuild-composer
+          - composer-cli
+        state: present
+
+    # ------------------------------------------------------------------
+    # 2. Build golden image (optional — skip with -e golden_image_build=false)
+    # ------------------------------------------------------------------
+    - name: Start osbuild-composer
+      ansible.builtin.systemd:
+        name: osbuild-composer.socket
+        state: started
+        enabled: true
+      when: golden_image_build | bool
+
+    - name: Render blueprint with SSH public key
+      ansible.builtin.template:
+        src: "{{ blueprint_src }}"
+        dest: /tmp/rhel9-golden-blueprint.toml
+        mode: "0644"
+      vars:
+        REPLACE_WITH_SSH_PUBLIC_KEY: "{{ ssh_pub_key }}"
+      when: golden_image_build | bool
+
+    - name: Push blueprint to Image Builder
+      ansible.builtin.command:
+        cmd: composer-cli blueprints push /tmp/rhel9-golden-blueprint.toml
+      changed_when: true
+      when: golden_image_build | bool
+
+    - name: Resolve blueprint dependencies
+      ansible.builtin.command:
+        cmd: "composer-cli blueprints depsolve {{ blueprint_name }}"
+      changed_when: false
+      when: golden_image_build | bool
+
+    - name: Start golden image compose
+      ansible.builtin.command:
+        cmd: "composer-cli compose start {{ blueprint_name }} image-installer"
+      register: compose_start
+      changed_when: true
+      when: golden_image_build | bool
+
+    - name: Extract compose ID
+      ansible.builtin.set_fact:
+        compose_id: "{{ compose_start.stdout.split()[1] }}"
+      when: golden_image_build | bool
+
+    - name: Wait for golden image build to finish (10-20 minutes)
+      ansible.builtin.command:
+        cmd: "composer-cli compose status"
+      register: compose_status
+      until: "compose_id ~ ' FINISHED' in compose_status.stdout"
+      retries: 60
+      delay: 30
+      changed_when: false
+      failed_when: "compose_id ~ ' FAILED' in compose_status.stdout"
+      when: golden_image_build | bool
+
+    - name: Create ISO directory
+      ansible.builtin.file:
+        path: "{{ iso_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Download golden image ISO
+      ansible.builtin.command:
+        cmd: "composer-cli compose image {{ compose_id }} --filename {{ golden_iso }}"
+      when: golden_image_build | bool
+      changed_when: true
+
+    # ------------------------------------------------------------------
+    # 3. Generate per-host kickstarts from template
+    # ------------------------------------------------------------------
+    - name: Create kickstart output directory
+      ansible.builtin.file:
+        path: kickstart/generated
+        state: directory
+        mode: "0755"
+
+- name: Generate per-host kickstart files
+  hosts: servers
+  gather_facts: false
+  tasks:
+    - name: Render kickstart for {{ inventory_hostname }}
+      ansible.builtin.template:
+        src: kickstart/ks.cfg.j2
+        dest: "kickstart/generated/{{ inventory_hostname }}.cfg"
+        mode: "0644"
+      delegate_to: localhost
+
+# ------------------------------------------------------------------
+# 4. Build per-host ISOs and set up NFS
+# ------------------------------------------------------------------
+- name: Build ISOs and configure NFS
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+
+  vars:
+    iso_dir: /srv/iso
+    golden_iso: "{{ iso_dir }}/rhel9-golden.iso"
+    stock_iso: "{{ lookup('env', 'STOCK_ISO') | default('rhel-9-x86_64-dvd.iso', true) }}"
+    golden_image_build: true
+    input_iso: "{{ golden_iso if golden_image_build | default(true) else stock_iso }}"
+    idrac_ip: "192.168.50.252"
+
+  tasks:
+    - name: Build unattended ISO for each host
+      ansible.builtin.command:
+        cmd: "mkksiso --ks kickstart/generated/{{ item }}.cfg {{ input_iso }} {{ iso_dir }}/{{ item }}-baremetal.iso"
+      loop: "{{ groups['servers'] }}"
+      changed_when: true
+
+    # ------------------------------------------------------------------
+    # 5. Configure NFS share
+    # ------------------------------------------------------------------
+    - name: Create NFS exports directory
+      ansible.builtin.file:
+        path: /etc/exports.d
+        state: directory
+        mode: "0755"
+
+    - name: Configure NFS export for iDRAC
+      ansible.builtin.copy:
+        dest: /etc/exports.d/iso.exports
+        mode: "0644"
+        content: "{{ iso_dir }} {{ idrac_ip }}(ro,sync,no_root_squash,no_subtree_check)\n"
+      notify: reload nfs exports
+
+    - name: Enable and start NFS server
+      ansible.builtin.systemd:
+        name: nfs-server
+        state: started
+        enabled: true
+
+    - name: Enable and start firewalld
+      ansible.builtin.systemd:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: Open NFS services in firewall
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop:
+        - nfs
+        - mountd
+        - rpc-bind
+
+    - name: Set SELinux boolean for NFS exports
+      ansible.posix.seboolean:
+        name: nfs_export_all_ro
+        state: true
+        persistent: true
+
+    - name: Show summary
+      ansible.builtin.debug:
+        msg: >-
+          Environment ready.
+          ISOs in {{ iso_dir }},
+          NFS exported to {{ idrac_ip }}.
+          Run provision_rhel9.yml to deploy.
+
+  handlers:
+    - name: reload nfs exports
+      ansible.builtin.command:
+        cmd: exportfs -ra
+      changed_when: true

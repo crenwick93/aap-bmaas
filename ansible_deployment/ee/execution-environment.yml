@@ -1,0 +1,23 @@
+---
+version: 3
+
+dependencies:
+  galaxy:
+    collections:
+      - name: dellemc.openmanage
+        version: ">=9.0.0,<10.0.0"
+  python:
+    - omsdk
+  system:
+    - gcc [platform:rpm]
+    - python3.11-devel [platform:rpm]
+
+options:
+  package_manager_path: /usr/bin/microdnf
+
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform-25/ee-minimal-rhel9:latest
+
+build_arg_defaults:
+  ANSIBLE_GALAXY_CLI_COLLECTION_OPTS: "--pre"

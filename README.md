@@ -1,16 +1,70 @@
 # AAP Bare-Metal RHEL 9 Provisioning via Dell iDRAC7
 
-Provisions RHEL 9 onto a Dell PowerEdge T620 by driving iDRAC7 to boot an unattended ISO served over NFS — orchestrated from Ansible Automation Platform (AAP) 2.6.
+Provisions RHEL 9 onto a Dell PowerEdge T620 by driving iDRAC7 to boot an unattended ISO served over NFS, then configures the host with a demo web application — all orchestrated from Ansible Automation Platform (AAP) 2.6.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        BUILD PHASE (one-time)                       │
+│                                                                     │
+│   blueprint.toml ──► Image Builder ──► rhel9-golden.iso             │
+│   (ansible user,       (osbuild-         (golden image              │
+│    SSH hardening,       composer)          with baseline)            │
+│    packages)                                  │                     │
+│                                               ▼                     │
+│   inventory.ini ──► ks.cfg.j2 ──► t620-demo.cfg ──► mkksiso        │
+│   (hostname, IP,     (Jinja2       (per-host          │             │
+│    disk layout)       template)     kickstart)         ▼             │
+│                                              t620-demo-unattended.iso│
+│                                                       │             │
+│                                                       ▼             │
+│                                                  /srv/iso (NFS)     │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                     DEPLOY PHASE (per server)                       │
+│                                                                     │
+│   ┌───────────┐    HTTPS/WSMan     ┌───────────┐                    │
+│   │    AAP     │ ─────────────────► │  iDRAC7   │                    │
+│   │  (laptop)  │  BootToNetworkISO  │ .50.252   │                    │
+│   │  .50.251   │                    └─────┬─────┘                    │
+│   └───────────┘                          │                          │
+│        │                          mounts ISO                        │
+│        │                          over NFS                          │
+│        │                                 │                          │
+│   /srv/iso ◄─────────────────────────────┘                          │
+│   (NFS share)                            │                          │
+│                                    powers on T620                   │
+│                                    boots virtual CD                 │
+│                                          │                          │
+│                                          ▼                          │
+│                                 ┌─────────────────┐                 │
+│                                 │   RHEL 9 Install │                 │
+│                                 │   (unattended)   │                 │
+│                                 └────────┬────────┘                 │
+│                                          │                          │
+│                                       reboot                        │
+│                                          │                          │
+│                                          ▼                          │
+│   ┌───────────┐       SSH        ┌───────────────┐                  │
+│   │    AAP     │ ──────────────► │     T620       │                  │
+│   │  (laptop)  │  configure_     │   RHEL 9 +    │                  │
+│   │           │  rhel9.yml      │   demo app    │                  │
+│   └───────────┘                  └───────────────┘                  │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ## Prerequisites
 
 | Requirement | Purpose |
 |---|---|
-| `lorax` package (`dnf install lorax`) | Provides `mkksiso` to embed the kickstart into the ISO |
-| `omsdk` Python package | Required by the `dellemc.openmanage` Ansible modules for WSMan/iDRAC communication |
+| `osbuild-composer` + `composer-cli` | Image Builder — builds the golden image ISO |
+| `lorax` (`mkksiso`) | Layers the per-host kickstart onto the golden image |
+| `omsdk` Python package | Required by `dellemc.openmanage` for WSMan/iDRAC communication |
 | `dellemc.openmanage` collection (9.x) | Ansible collection with `idrac_os_deployment` module |
-| Stock RHEL 9 DVD ISO (`rhel-9-x86_64-dvd.iso`) | Base ISO before kickstart injection |
-| NFS server packages (`nfs-utils`) | Serves the ISO to iDRAC over NFS |
+| `nfs-utils` | Serves the ISO to iDRAC over NFS |
+| `infra.aap_configuration` collection | Configuration as Code — creates all AAP objects |
 
 ### Why RHEL 9 and not RHEL 10?
 
@@ -31,78 +85,146 @@ iDRAC7's Redfish implementation is too limited for OS deployment. The `dellemc.o
 | NFS share | `/srv/iso` |
 | AAP | 2.6 (containerized), `https://aaponprem.chrislab.dev` |
 
+## Playbooks
+
+| Playbook | Target | Purpose |
+|---|---|---|
+| `prepare_environment.yml` | localhost | Builds golden image, generates kickstarts, builds ISOs, configures NFS |
+| `provision_rhel9.yml` | iDRAC (`192.168.50.252`) | Mounts ISO over NFS and boots unattended RHEL 9 install |
+| `wait_for_install.yml` | T620 host | Polls SSH until the host comes online, confirms RHEL 9 |
+| `configure_rhel9.yml` | T620 host | Installs httpd, deploys a demo landing page, opens firewall |
+
 ## Step-by-step
 
-### 1. Build the unattended ISO
+### 1. Set credentials
 
-First, generate a root password hash and paste it into `kickstart/ks.cfg` at the `rootpw --iscrypted` line:
+Copy the example environment file and fill in the blanks:
 
 ```bash
+cp .env.example .env
+# Edit .env — set AAP_TOKEN and IDRAC_PASSWORD
+```
+
+Set the root password hash in the inventory (used by kickstart generation):
+
+```bash
+# Generate a hash
 python3 -c 'import crypt; print(crypt.crypt("YourDemoPass", crypt.mksalt(crypt.METHOD_SHA512)))'
+
+# Paste the output into inventory.ini under [servers]
+# t620-demo ks_hostname=t620-demo ks_root_password_hash=<paste here>
 ```
 
-Then build the ISO (requires `lorax` installed):
-
-```bash
-./scripts/build-iso.sh /path/to/rhel-9-x86_64-dvd.iso
-```
-
-This embeds the kickstart and writes the output to `/srv/iso/rhel9-unattended.iso`.
-
-### 2. Start the NFS share
-
-```bash
-./scripts/setup-nfs.sh
-```
-
-This creates `/srv/iso`, exports it read-only to the iDRAC IP (`192.168.50.252`), enables `nfs-server`, opens the firewall, and sets the required SELinux boolean.
-
-### 3. Encrypt the vault
-
-Edit `vault/idrac_secrets.yml` with the real iDRAC root password, then encrypt:
+Encrypt the iDRAC vault:
 
 ```bash
 ansible-vault encrypt vault/idrac_secrets.yml
 ```
 
-Optionally, store the vault password in `.vault_pass` (already in `.gitignore`) and uncomment the `vault_password_file` line in `ansible.cfg`.
-
-### 4. Install dependencies (local testing)
+### 2. Install Ansible dependencies
 
 ```bash
 pip install -r requirements.txt
 ansible-galaxy collection install -r collections/requirements.yml
 ```
 
-### 5. Run the playbook (local)
+### 3. Prepare the environment
+
+This single playbook handles the entire build phase — golden image, kickstarts, ISOs, and NFS:
 
 ```bash
-ansible-playbook provision_rhel9.yml --ask-vault-pass
+ansible-playbook prepare_environment.yml
 ```
 
-### 6. AAP wiring
+What it does:
+1. Installs prerequisites (`lorax`, `nfs-utils`, `osbuild-composer`, etc.)
+2. Builds the golden image via Image Builder (ansible user, SSH hardening, baseline packages)
+3. Generates per-host kickstarts from `inventory.ini` using the Jinja2 template
+4. Layers each kickstart onto the golden image ISO with `mkksiso`
+5. Exports `/srv/iso` over NFS to the iDRAC, opens the firewall, sets SELinux
 
-To run this from AAP instead of the CLI:
+To skip the golden image build and use a stock RHEL 9 DVD instead:
 
-- **Execution Environment:** Build a custom EE that includes `omsdk` (pip) and the `dellemc.openmanage` collection. The stock EE does not ship OMSDK.
-- **Credential:** Store the iDRAC root password as a vault credential or AAP custom credential type — do not put it in extra vars in clear.
-- **Project:** Point AAP at this Git repo.
-- **Job Template:** Create a template that runs `provision_rhel9.yml` against the `idrac` inventory group. This becomes the single "Launch" button for the demo.
+```bash
+ansible-playbook prepare_environment.yml -e golden_image_build=false -e stock_iso=/path/to/rhel-9-dvd.iso
+```
 
-## Runtime flow
+### 4. Provision and configure
 
-When the playbook runs (starting from the T620 powered OFF):
+```bash
+# Provision — triggers iDRAC BootToNetworkISO
+ansible-playbook provision_rhel9.yml --ask-vault-pass
 
-1. Ansible connects to iDRAC `192.168.50.252` over HTTPS/WSMan.
-2. A Lifecycle Controller `BootToNetworkISO` job is created.
-3. iDRAC mounts `rhel9-unattended.iso` from `192.168.50.251:/srv/iso` and exposes it as a virtual CD-ROM.
-4. iDRAC sets one-time boot to CD and powers the T620 on.
-5. The RHEL 9 installer boots; the embedded kickstart drives an unattended install.
-6. The server reboots into a fully installed RHEL 9. The ISO auto-detaches after the `expose_duration` (60 minutes).
+# Wait for install to complete (polls SSH)
+ansible-playbook wait_for_install.yml
+
+# Configure — deploy demo app
+ansible-playbook configure_rhel9.yml
+```
+
+## Golden image
+
+The golden image is defined in `golden-image/blueprint.toml` and built by Image Builder (`osbuild-composer`). It contains the organisation's baseline:
+
+- `ansible` service account with SSH key auth and passwordless sudo
+- SSH hardened (root login disabled, password auth disabled)
+- `python3`, `openssh-server`, `firewalld` pre-installed
+- Timezone, locale, NTP configured
+
+The per-host kickstart (`kickstart/ks.cfg.j2`) is intentionally minimal — only hostname, network, disk layout, and root password. Everything else is baked into the golden image.
+
+To add more servers, add entries to the `[servers]` group in `inventory.ini`:
+
+```ini
+[servers]
+t620-demo   ks_hostname=t620-demo   ks_root_password_hash=$6$...
+r730-web01  ks_hostname=r730-web01  ks_ip=10.0.1.20  ks_gateway=10.0.1.1  ks_root_password_hash=$6$...
+```
+
+Then re-run `ansible-playbook prepare_environment.yml` — one ISO per host is generated automatically.
+
+## AAP wiring (Configuration as Code)
+
+The `ansible_deployment/` directory automates AAP setup using `infra.aap_configuration`. One script creates all objects:
+
+### Quick start
+
+1. Fill in `.env` (see `.env.example`)
+
+2. Install the CaC collection:
+
+```bash
+ansible-galaxy collection install infra.aap_configuration
+```
+
+3. Run:
+
+```bash
+./ansible_deployment/scripts/cac-apply.sh
+```
+
+This creates in AAP:
+- **Organization:** Bare Metal Provisioning
+- **Project:** Bare Metal Automation (this Git repo)
+- **Inventories:** iDRAC Management + Bare Metal Hosts
+- **Credentials:** Dell iDRAC (custom type) + T620 SSH (Machine)
+- **Execution Environment:** Bare Metal EE (custom image with `omsdk` + `dellemc.openmanage`)
+- **Job Templates:** Provision RHEL 9, Wait for Install, Configure RHEL 9
+- **Workflow:** End-to-End Bare Metal Deployment (provision > wait > configure)
+
+### Custom Execution Environment
+
+Build the EE image that includes `omsdk` and the Dell collection:
+
+```bash
+ansible-builder build -f ansible_deployment/ee/execution-environment.yml -t quay.io/youruser/bmaas-ee:latest
+podman push quay.io/youruser/bmaas-ee:latest
+```
 
 ## Troubleshooting
 
-- **NFS reachability:** Validate from the iDRAC's perspective, not the laptop's. A share the laptop sees locally but the iDRAC cannot reach (firewall, SELinux, wrong export IP) is the classic failure and won't surface until `BootToNetworkISO` runs.
-- **Lifecycle Controller:** Confirm it is enabled (F10 at boot, or via iDRAC Settings → Lifecycle Controller). It is the engine for the entire `BootToNetworkISO` operation.
+- **NFS reachability:** Validate from the iDRAC's perspective, not the laptop's. A share the laptop sees locally but the iDRAC cannot reach (firewall, SELinux, wrong export IP) is the classic failure.
+- **Lifecycle Controller:** Confirm it is enabled (F10 at boot, or via iDRAC Settings). It is the engine for `BootToNetworkISO`.
 - **SELinux:** If NFS mounts fail silently, check `setsebool -P nfs_export_all_ro 1` was applied.
 - **Firewall:** Ensure `nfs`, `mountd`, and `rpc-bind` services are open in `firewalld`.
+- **T620 IP after install:** The kickstart uses DHCP (`--device=link`). Check your router/DHCP server for the lease, or look at the iDRAC console to find the assigned IP.

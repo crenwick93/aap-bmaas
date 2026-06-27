@@ -1,0 +1,30 @@
+---
+- name: Wait for T620 to finish RHEL 9 install and come online
+  hosts: t620
+  gather_facts: false
+  vars:
+    wait_timeout: 3600
+
+  tasks:
+    - name: Wait for SSH to become available
+      ansible.builtin.wait_for_connection:
+        timeout: "{{ wait_timeout }}"
+        sleep: 30
+
+    - name: Gather facts once host is reachable
+      ansible.builtin.setup:
+
+    - name: Confirm RHEL 9 is installed
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "RedHat"
+          - ansible_distribution_major_version == "9"
+        fail_msg: "Expected RHEL 9 but found {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    - name: Show host details
+      ansible.builtin.debug:
+        msg: >-
+          {{ ansible_hostname }} is online —
+          {{ ansible_distribution }} {{ ansible_distribution_version }},
+          {{ ansible_processor_vcpus }} vCPUs,
+          {{ ansible_memtotal_mb }} MB RAM

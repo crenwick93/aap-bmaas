@@ -1,0 +1,148 @@
+---
+- name: Configure freshly provisioned RHEL 9 — deploy demo web app
+  hosts: t620
+  become: true
+  gather_facts: true
+
+  vars:
+    app_name: "AAP Bare Metal Demo"
+    http_port: 80
+
+  tasks:
+    - name: Install httpd
+      ansible.builtin.dnf:
+        name:
+          - httpd
+          - firewalld
+        state: present
+
+    - name: Deploy demo landing page
+      ansible.builtin.copy:
+        dest: /var/www/html/index.html
+        mode: "0644"
+        content: |
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{{ app_name }}</title>
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Red Hat Display', sans-serif;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+                color: #e0e0e0;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              .card {
+                background: rgba(255,255,255,0.05);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255,255,255,0.1);
+                border-radius: 16px;
+                padding: 3rem;
+                max-width: 640px;
+                width: 90%;
+                text-align: center;
+              }
+              .badge {
+                display: inline-block;
+                background: #ee0000;
+                color: #fff;
+                padding: 0.3rem 1rem;
+                border-radius: 20px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                letter-spacing: 0.05em;
+                margin-bottom: 1.5rem;
+              }
+              h1 { font-size: 2rem; margin-bottom: 1rem; color: #fff; }
+              .meta {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 1rem;
+                margin-top: 2rem;
+                text-align: left;
+              }
+              .meta-item {
+                background: rgba(255,255,255,0.03);
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 8px;
+                padding: 1rem;
+              }
+              .meta-item .label { font-size: 0.75rem; color: #888; text-transform: uppercase; }
+              .meta-item .value { font-size: 0.95rem; color: #fff; margin-top: 0.25rem; }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <span class="badge">ANSIBLE AUTOMATION PLATFORM</span>
+              <h1>{{ app_name }}</h1>
+              <p>This server was provisioned from bare metal and configured end-to-end by AAP — no manual steps.</p>
+              <div class="meta">
+                <div class="meta-item">
+                  <div class="label">Server</div>
+                  <div class="value">{{ ansible_hostname }}</div>
+                </div>
+                <div class="meta-item">
+                  <div class="label">OS</div>
+                  <div class="value">{{ ansible_distribution }} {{ ansible_distribution_version }}</div>
+                </div>
+                <div class="meta-item">
+                  <div class="label">IP Address</div>
+                  <div class="value">{{ ansible_default_ipv4.address }}</div>
+                </div>
+                <div class="meta-item">
+                  <div class="label">Provisioned</div>
+                  <div class="value">{{ ansible_date_time.date }}</div>
+                </div>
+              </div>
+            </div>
+          </body>
+          </html>
+      notify: restart httpd
+
+    - name: Enable and start httpd
+      ansible.builtin.systemd:
+        name: httpd
+        state: started
+        enabled: true
+
+    - name: Enable and start firewalld
+      ansible.builtin.systemd:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: Open HTTP in firewall
+      ansible.posix.firewalld:
+        service: http
+        permanent: true
+        immediate: true
+        state: enabled
+
+    - name: Set SELinux boolean for httpd network connect
+      ansible.posix.seboolean:
+        name: httpd_can_network_connect
+        state: true
+        persistent: true
+
+    - name: Verify httpd is serving
+      ansible.builtin.uri:
+        url: "http://localhost:{{ http_port }}"
+        return_content: false
+        status_code: 200
+      register: http_check
+
+    - name: Show result
+      ansible.builtin.debug:
+        msg: "Web app deployed — browse to http://{{ ansible_default_ipv4.address }}:{{ http_port }}"
+
+  handlers:
+    - name: restart httpd
+      ansible.builtin.systemd:
+        name: httpd
+        state: restarted

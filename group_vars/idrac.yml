@@ -1,2 +1,2 @@
 iso_share: "192.168.50.251:/srv/iso"
-iso_image: "rhel9-unattended.iso"
+iso_image: "t620-demo-baremetal.iso"

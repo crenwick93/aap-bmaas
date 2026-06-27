@@ -1,0 +1,168 @@
+---
+# =============================================================================
+# AAP Configuration as Code — Bare-Metal RHEL 9 Provisioning
+# =============================================================================
+# Single organization that owns the full lifecycle:
+#   1. Provision RHEL 9 via iDRAC BootToNetworkISO
+#   2. Configure the freshly installed host (deploy a demo app)
+#
+# apply.yml loads this file and runs infra.aap_configuration.dispatch
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Organizations
+# -----------------------------------------------------------------------------
+aap_organizations:
+  - name: "Bare Metal Provisioning"
+    description: "End-to-end bare-metal lifecycle — provision and configure Dell PowerEdge servers"
+
+# -----------------------------------------------------------------------------
+# Custom Credential Types
+# -----------------------------------------------------------------------------
+controller_credential_types:
+  - name: "Dell iDRAC"
+    description: "iDRAC out-of-band management credentials (WSMan/HTTPS)"
+    kind: "cloud"
+    inputs:
+      fields:
+        - id: IDRAC_USER
+          type: string
+          label: iDRAC Username
+        - id: IDRAC_PASSWORD
+          type: string
+          label: iDRAC Password
+          secret: true
+      required:
+        - IDRAC_USER
+        - IDRAC_PASSWORD
+    injectors:
+      extra_vars:
+        idrac_user: !unsafe "{{ IDRAC_USER }}"
+        idrac_password: !unsafe "{{ IDRAC_PASSWORD }}"
+
+# -----------------------------------------------------------------------------
+# Projects
+# -----------------------------------------------------------------------------
+controller_projects:
+  - name: "Bare Metal Automation"
+    description: "RHEL 9 provisioning and post-install configuration playbooks"
+    organization: "Bare Metal Provisioning"
+    scm_type: "git"
+    scm_url: "{{ git_repo_url }}"
+    scm_branch: "main"
+    scm_update_on_launch: true
+
+# -----------------------------------------------------------------------------
+# Inventories
+# -----------------------------------------------------------------------------
+controller_inventories:
+  - name: "iDRAC Management"
+    description: "Dell iDRAC endpoints for out-of-band provisioning"
+    organization: "Bare Metal Provisioning"
+
+  - name: "Bare Metal Hosts"
+    description: "Provisioned RHEL 9 servers for day-2 configuration"
+    organization: "Bare Metal Provisioning"
+
+# -----------------------------------------------------------------------------
+# Hosts
+# -----------------------------------------------------------------------------
+controller_hosts:
+  - name: "192.168.50.252"
+    inventory: "iDRAC Management"
+    variables:
+      ansible_connection: local
+
+  - name: "t620-demo"
+    inventory: "Bare Metal Hosts"
+    variables:
+      ansible_host: "192.168.50.252"
+      ansible_user: ansible
+      ansible_become: true
+
+# -----------------------------------------------------------------------------
+# Credentials
+# -----------------------------------------------------------------------------
+controller_credentials:
+  - name: "T620 iDRAC"
+    description: "iDRAC7 root credentials for Dell PowerEdge T620"
+    organization: "Bare Metal Provisioning"
+    credential_type: "Dell iDRAC"
+    inputs:
+      IDRAC_USER: "root"
+      IDRAC_PASSWORD: "{{ idrac_password }}"
+
+  - name: "T620 SSH"
+    description: "SSH access to the provisioned RHEL 9 host (ansible service account)"
+    organization: "Bare Metal Provisioning"
+    credential_type: "Machine"
+    inputs:
+      username: ansible
+      ssh_key_data: "{{ t620_ssh_key }}"
+      become_method: sudo
+
+# -----------------------------------------------------------------------------
+# Execution Environments
+# -----------------------------------------------------------------------------
+controller_execution_environments:
+  - name: "Bare Metal EE"
+    description: "Custom EE with omsdk and dellemc.openmanage for iDRAC operations"
+    organization: "Bare Metal Provisioning"
+    image: "{{ custom_ee_image }}"
+    pull: "missing"
+
+# -----------------------------------------------------------------------------
+# Job Templates
+# -----------------------------------------------------------------------------
+controller_templates:
+  - name: "Provision RHEL 9"
+    description: "Boot Dell T620 to unattended RHEL 9 ISO via iDRAC BootToNetworkISO over NFS"
+    organization: "Bare Metal Provisioning"
+    job_type: "run"
+    project: "Bare Metal Automation"
+    playbook: "provision_rhel9.yml"
+    inventory: "iDRAC Management"
+    execution_environment: "Bare Metal EE"
+    credentials:
+      - "T620 iDRAC"
+
+  - name: "Wait for Install"
+    description: "Poll the T620 until SSH is reachable and confirm RHEL 9 is installed"
+    organization: "Bare Metal Provisioning"
+    job_type: "run"
+    project: "Bare Metal Automation"
+    playbook: "wait_for_install.yml"
+    inventory: "Bare Metal Hosts"
+    credentials:
+      - "T620 SSH"
+
+  - name: "Configure RHEL 9"
+    description: "Post-provision configuration — deploy demo web application on freshly installed host"
+    organization: "Bare Metal Provisioning"
+    job_type: "run"
+    project: "Bare Metal Automation"
+    playbook: "configure_rhel9.yml"
+    inventory: "Bare Metal Hosts"
+    credentials:
+      - "T620 SSH"
+
+# -----------------------------------------------------------------------------
+# Workflow Templates
+# -----------------------------------------------------------------------------
+controller_workflows:
+  - name: "End-to-End Bare Metal Deployment"
+    description: "Provision RHEL 9 on bare metal, then configure the host with a demo application"
+    organization: "Bare Metal Provisioning"
+    simplified_workflow_nodes:
+      - identifier: "Provision RHEL 9"
+        unified_job_template: "Provision RHEL 9"
+        success_nodes:
+          - "Wait for Install"
+
+      - identifier: "Wait for Install"
+        unified_job_template: "Wait for Install"
+        success_nodes:
+          - "Configure RHEL 9"
+
+      - identifier: "Configure RHEL 9"
+        unified_job_template: "Configure RHEL 9"

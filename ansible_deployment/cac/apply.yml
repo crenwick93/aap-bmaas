@@ -1,0 +1,29 @@
+---
+- name: Apply AAP objects — Bare-Metal RHEL 9 Provisioning
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - infra.aap_configuration
+
+  vars:
+    aap_hostname: "{{ lookup('env', 'AAP_HOSTNAME') | default(omit, true) }}"
+    aap_token: "{{ lookup('env', 'AAP_TOKEN') | default(omit, true) }}"
+    aap_validate_certs: "{{ (lookup('env', 'AAP_VALIDATE_CERTS') | default('false', true)) | bool }}"
+
+    aap_configuration_secure_logging: false
+    aap_configuration_collect_logs: true
+
+    idrac_password: "{{ lookup('env', 'IDRAC_PASSWORD') | default(omit, true) }}"
+
+    t620_ssh_key: "{{ lookup('file', t620_ssh_key_path, errors='ignore') | default(omit, true) }}"
+    t620_ssh_key_path: "{{ lookup('env', 'T620_SSH_KEY_PATH') | default('~/.ssh/id_rsa', true) }}"
+
+    git_repo_url: "{{ lookup('env', 'GIT_REPO_URL') | default('https://github.com/crenwick93/aap-bmaas.git', true) }}"
+
+    custom_ee_image: "{{ lookup('env', 'CUSTOM_EE_IMAGE') | default('quay.io/crenwick93/bmaas-ee:latest', true) }}"
+
+  vars_files:
+    - vars.yml
+  roles:
+    - role: infra.aap_configuration.dispatch

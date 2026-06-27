@@ -1,0 +1,56 @@
+name = "rhel9-golden"
+description = "RHEL 9 golden image — hardened baseline with ansible service account"
+version = "1.0.0"
+distro = "rhel-9"
+
+# Standard packages beyond minimal
+[[packages]]
+name = "python3"
+version = "*"
+
+[[packages]]
+name = "openssh-server"
+version = "*"
+
+[[packages]]
+name = "sudo"
+version = "*"
+
+[[packages]]
+name = "firewalld"
+version = "*"
+
+# Ansible service account — passwordless sudo, SSH key auth only
+[[customizations.user]]
+name = "ansible"
+groups = ["wheel"]
+shell = "/bin/bash"
+key = "REPLACE_WITH_SSH_PUBLIC_KEY"
+
+# Passwordless sudo for ansible user
+[[customizations.filesystem]]
+
+[customizations.locale]
+languages = ["en_US.UTF-8"]
+keyboard = "us"
+
+[customizations.timezone]
+timezone = "Europe/London"
+ntpservers = ["pool.ntp.org"]
+
+[customizations.services]
+enabled = ["sshd", "firewalld"]
+
+# SSH hardening — disable root login and password auth
+[[customizations.files]]
+path = "/etc/ssh/sshd_config.d/99-hardening.conf"
+data = """
+PermitRootLogin no
+PasswordAuthentication no
+"""
+
+# Passwordless sudo for ansible user
+[[customizations.files]]
+path = "/etc/sudoers.d/ansible"
+mode = "0440"
+data = "ansible ALL=(ALL) NOPASSWD: ALL\n"
