@@ -6,6 +6,8 @@ __pycache__/
 instructions
 kickstart/generated/
 vault/idrac_secrets.yml
+vault/laptop_ssh_key
+*.key
 .ansible
 context/
 venv/

@@ -1,18 +1,50 @@
 # Per-host kickstart for {{ ks_hostname }} — generated from template.
-# Baseline config is baked into the golden image; this covers host-specific settings only.
+# Deploys the golden image built by Image Builder with per-host customisations.
 text
 eula --agreed
 
+# Install from the pre-built golden image embedded in the ISO
+liveimg --url=file:///run/install/repo/liveimg.tar.gz
+
 rootpw --iscrypted {{ ks_root_password_hash }}
 
-{% if ks_ip is defined and ks_gateway is defined %}
-network --bootproto=static --ip={{ ks_ip }} --netmask={{ ks_netmask | default('255.255.255.0') }} --gateway={{ ks_gateway }} --nameserver={{ ks_dns | default('8.8.8.8') }} --device=link --activate --hostname={{ ks_hostname }}
+{% if ks_ip and ks_gateway %}
+network --bootproto=static --ip={{ ks_ip }} --netmask={{ ks_netmask }} --gateway={{ ks_gateway }} --nameserver={{ ks_dns }} --device=link --activate --hostname={{ ks_hostname }}
 {% else %}
 network --bootproto=dhcp --device=link --activate --hostname={{ ks_hostname }}
 {% endif %}
 
-bootloader --location=mbr
-clearpart --all --initlabel
-autopart --type=lvm
+%pre --interpreter=/bin/bash
+for dev in /sys/block/sd*; do
+  [ -d "$dev" ] || continue
+  if [ "$(cat "$dev/removable" 2>/dev/null)" = "0" ]; then
+    DISK=$(basename "$dev")
+    break
+  fi
+done
+DISK=${DISK:-sda}
 
-reboot
+cat > /tmp/partitioning.ks << EOF
+zerombr
+bootloader --location=mbr --boot-drive=$DISK
+clearpart --all --initlabel --drives=$DISK
+autopart --type=plain --nohome
+EOF
+%end
+
+%include /tmp/partitioning.ks
+
+%post --interpreter=/bin/bash
+useradd -m -G wheel ansible
+mkdir -p /home/ansible/.ssh
+echo "{{ ks_ssh_pubkey }}" > /home/ansible/.ssh/authorized_keys
+chmod 700 /home/ansible/.ssh
+chmod 600 /home/ansible/.ssh/authorized_keys
+chown -R ansible:ansible /home/ansible/.ssh
+restorecon -R /home/ansible/.ssh
+
+echo "ansible ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/ansible
+chmod 0440 /etc/sudoers.d/ansible
+%end
+
+poweroff

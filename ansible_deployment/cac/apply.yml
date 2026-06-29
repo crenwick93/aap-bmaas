@@ -17,7 +17,10 @@
     idrac_password: "{{ lookup('env', 'IDRAC_PASSWORD') | default(omit, true) }}"
 
     t620_ssh_key: "{{ lookup('file', t620_ssh_key_path, errors='ignore') | default(omit, true) }}"
-    t620_ssh_key_path: "{{ lookup('env', 'T620_SSH_KEY_PATH') | default('~/.ssh/id_rsa', true) }}"
+    t620_ssh_key_path: "{{ lookup('env', 'T620_SSH_KEY_PATH') | default(playbook_dir ~ '/../../vault/laptop_ssh_key', true) }}"
+
+    rhsm_username: "{{ lookup('env', 'RHSM_USERNAME') | default(omit, true) }}"
+    rhsm_password: "{{ lookup('env', 'RHSM_PASSWORD') | default(omit, true) }}"
 
     git_repo_url: "{{ lookup('env', 'GIT_REPO_URL') | default('https://github.com/crenwick93/aap-bmaas.git', true) }}"
 

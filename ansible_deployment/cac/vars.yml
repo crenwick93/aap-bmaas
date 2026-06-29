@@ -2,12 +2,6 @@
 # =============================================================================
 # AAP Configuration as Code — Bare-Metal RHEL 9 Provisioning
 # =============================================================================
-# Single organization that owns the full lifecycle:
-#   1. Provision RHEL 9 via iDRAC BootToNetworkISO
-#   2. Configure the freshly installed host (deploy a demo app)
-#
-# apply.yml loads this file and runs infra.aap_configuration.dispatch
-# =============================================================================
 
 # -----------------------------------------------------------------------------
 # Organizations
@@ -40,6 +34,26 @@ controller_credential_types:
         idrac_user: !unsafe "{{ IDRAC_USER }}"
         idrac_password: !unsafe "{{ IDRAC_PASSWORD }}"
 
+  - name: "RHSM Credentials"
+    description: "Red Hat Subscription Manager credentials for host registration"
+    kind: "cloud"
+    inputs:
+      fields:
+        - id: RHSM_USERNAME
+          type: string
+          label: RHSM Username
+        - id: RHSM_PASSWORD
+          type: string
+          label: RHSM Password
+          secret: true
+      required:
+        - RHSM_USERNAME
+        - RHSM_PASSWORD
+    injectors:
+      extra_vars:
+        rhsm_username: !unsafe "{{ RHSM_USERNAME }}"
+        rhsm_password: !unsafe "{{ RHSM_PASSWORD }}"
+
 # -----------------------------------------------------------------------------
 # Projects
 # -----------------------------------------------------------------------------
@@ -53,15 +67,11 @@ controller_projects:
     scm_update_on_launch: true
 
 # -----------------------------------------------------------------------------
-# Inventories
+# Inventories — single inventory with all host groups
 # -----------------------------------------------------------------------------
 controller_inventories:
-  - name: "iDRAC Management"
-    description: "Dell iDRAC endpoints for out-of-band provisioning"
-    organization: "Bare Metal Provisioning"
-
-  - name: "Bare Metal Hosts"
-    description: "Provisioned RHEL 9 servers for day-2 configuration"
+  - name: "Bare Metal Deployment"
+    description: "All hosts involved in bare-metal provisioning and configuration"
     organization: "Bare Metal Provisioning"
 
 # -----------------------------------------------------------------------------
@@ -69,16 +79,31 @@ controller_inventories:
 # -----------------------------------------------------------------------------
 controller_hosts:
   - name: "192.168.50.252"
-    inventory: "iDRAC Management"
+    inventory: "Bare Metal Deployment"
     variables:
       ansible_connection: local
 
   - name: "t620-demo"
-    inventory: "Bare Metal Hosts"
+    inventory: "Bare Metal Deployment"
     variables:
-      ansible_host: "192.168.50.252"
+      ansible_host: "192.168.50.253"
       ansible_user: ansible
       ansible_become: true
+      ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+# -----------------------------------------------------------------------------
+# Groups
+# -----------------------------------------------------------------------------
+controller_groups:
+  - name: "idrac"
+    inventory: "Bare Metal Deployment"
+    hosts:
+      - "192.168.50.252"
+
+  - name: "t620"
+    inventory: "Bare Metal Deployment"
+    hosts:
+      - "t620-demo"
 
 # -----------------------------------------------------------------------------
 # Credentials
@@ -101,6 +126,14 @@ controller_credentials:
       ssh_key_data: "{{ t620_ssh_key }}"
       become_method: sudo
 
+  - name: "Red Hat Subscription"
+    description: "RHSM credentials for registering provisioned hosts"
+    organization: "Bare Metal Provisioning"
+    credential_type: "RHSM Credentials"
+    inputs:
+      RHSM_USERNAME: "{{ rhsm_username }}"
+      RHSM_PASSWORD: "{{ rhsm_password }}"
+
 # -----------------------------------------------------------------------------
 # Execution Environments
 # -----------------------------------------------------------------------------
@@ -121,32 +154,34 @@ controller_templates:
     job_type: "run"
     project: "Bare Metal Automation"
     playbook: "playbooks/provision_rhel9.yml"
-    inventory: "iDRAC Management"
+    inventory: "Bare Metal Deployment"
     execution_environment: "Bare Metal EE"
     credentials:
       - "T620 iDRAC"
 
   - name: "Wait for Install"
-    description: "Poll the T620 until SSH is reachable and confirm RHEL 9 is installed"
+    description: "Wait for power off, detach virtual media, boot to disk, verify RHEL 9"
     organization: "Bare Metal Provisioning"
     job_type: "run"
     project: "Bare Metal Automation"
     playbook: "playbooks/wait_for_install.yml"
-    inventory: "Bare Metal Hosts"
+    inventory: "Bare Metal Deployment"
     execution_environment: "Bare Metal EE"
     credentials:
+      - "T620 iDRAC"
       - "T620 SSH"
 
   - name: "Configure RHEL 9"
-    description: "Post-provision configuration — deploy demo web application on freshly installed host"
+    description: "Register with RHSM and deploy demo web application"
     organization: "Bare Metal Provisioning"
     job_type: "run"
     project: "Bare Metal Automation"
     playbook: "playbooks/configure_rhel9.yml"
-    inventory: "Bare Metal Hosts"
+    inventory: "Bare Metal Deployment"
     execution_environment: "Bare Metal EE"
     credentials:
       - "T620 SSH"
+      - "Red Hat Subscription"
 
 # -----------------------------------------------------------------------------
 # Workflow Templates

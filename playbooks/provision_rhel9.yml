@@ -2,9 +2,24 @@
 - name: Provision RHEL 9 on Dell T620 via iDRAC BootToNetworkISO
   hosts: idrac
   gather_facts: false
-  vars_files:
-    - ../vault/idrac_secrets.yml
+  pre_tasks:
+    - name: Load local secrets if available
+      ansible.builtin.include_vars:
+        file: ../vault/idrac_secrets.yml
+      failed_when: false
+      no_log: true
   tasks:
+    - name: Wait for Lifecycle Controller to be ready
+      dellemc.openmanage.idrac_lifecycle_controller_status_info:
+        idrac_ip: "{{ inventory_hostname }}"
+        idrac_user: "{{ idrac_user }}"
+        idrac_password: "{{ idrac_password }}"
+        validate_certs: false
+      register: lc_status
+      until: lc_status.lc_status_info.LCStatus == "Ready"
+      retries: 30
+      delay: 30
+
     - name: Boot T620 to RHEL 9 unattended ISO over NFS
       dellemc.openmanage.idrac_os_deployment:
         idrac_ip: "{{ inventory_hostname }}"
@@ -13,7 +28,7 @@
         validate_certs: false
         share_name: "{{ iso_share }}"
         iso_image: "{{ iso_image }}"
-        expose_duration: 60
+        expose_duration: 18
       register: osd_result
 
     - name: Show deployment job result
