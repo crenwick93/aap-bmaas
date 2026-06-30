@@ -1,0 +1,31 @@
+---
+- name: Close ServiceNow catalog request item after successful provisioning
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - snow_ritm_sys_id is defined
+          - snow_ritm_sys_id | length > 0
+        fail_msg: "snow_ritm_sys_id must be provided (passed from EDA rulebook)"
+
+    - name: Update RITM to Closed Complete
+      servicenow.itsm.api:
+        resource: sc_req_item
+        action: patch
+        sys_id: "{{ snow_ritm_sys_id }}"
+        data:
+          state: "3"
+          close_notes: >-
+            Server provisioned and configured by Ansible Automation Platform.
+            RHEL 9 installed via iDRAC, registered with RHSM, and demo
+            application deployed. Workflow completed successfully.
+          assigned_to: "{{ snow_assigned_to | default('') }}"
+      register: ritm_result
+
+    - name: Show updated RITM
+      ansible.builtin.debug:
+        msg: "RITM {{ snow_ritm_number | default(snow_ritm_sys_id) }} closed successfully"

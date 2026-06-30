@@ -1,0 +1,27 @@
+---
+- name: Update ServiceNow catalog request with progress
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - snow_ritm_sys_id is defined
+          - snow_message is defined
+        fail_msg: "snow_ritm_sys_id and snow_message must be provided"
+
+    - name: Post work note to RITM
+      servicenow.itsm.api:
+        resource: sc_req_item
+        action: patch
+        sys_id: "{{ snow_ritm_sys_id }}"
+        data:
+          state: "{{ snow_state | default('2') }}"
+          work_notes: "{{ snow_message }}"
+      register: update_result
+
+    - name: Log update
+      ansible.builtin.debug:
+        msg: "RITM {{ snow_ritm_number | default(snow_ritm_sys_id) }} updated: {{ snow_message }}"

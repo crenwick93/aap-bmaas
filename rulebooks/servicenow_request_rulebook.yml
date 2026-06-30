@@ -1,0 +1,27 @@
+---
+- name: Bare Metal Provisioning from ServiceNow Catalog
+  hosts: all
+  execution_strategy: parallel
+  sources:
+    - servicenow.itsm.records:
+        table: sc_req_item
+        interval: 30
+        remote_servicenow_timezone: "Europe/London"
+        sysparm_query: >
+          state=1^cat_item.name=Bare Metal Server Request^ORDERBYDESCsys_created_on
+      filters:
+        - ansible.eda.json_filter:
+        - ansible.eda.normalize_keys:
+  rules:
+    - name: Trigger bare metal deployment workflow
+      throttle:
+        once_within: 5 minutes
+        group_by_attributes:
+          - sys_id
+      condition: event.number is defined
+      action:
+        # TEST: trigger Test iDRAC to validate the EDA pipeline
+        # Switch back to run_workflow_template for the full demo
+        run_job_template:
+          name: Test iDRAC
+          organization: Default

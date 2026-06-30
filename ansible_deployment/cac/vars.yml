@@ -49,6 +49,31 @@ controller_credential_types:
         rhsm_username: !unsafe "{{ RHSM_USERNAME }}"
         rhsm_password: !unsafe "{{ RHSM_PASSWORD }}"
 
+  - name: "ServiceNow Credential"
+    description: "ServiceNow instance access for CMDB and incident management"
+    kind: "cloud"
+    inputs:
+      fields:
+        - id: SN_HOST
+          type: string
+          label: Snow Instance
+        - id: SN_USERNAME
+          type: string
+          label: Username
+        - id: SN_PASSWORD
+          type: string
+          label: Password
+          secret: true
+      required:
+        - SN_HOST
+        - SN_USERNAME
+        - SN_PASSWORD
+    injectors:
+      env:
+        SN_HOST: !unsafe "{{ SN_HOST }}"
+        SN_USERNAME: !unsafe "{{ SN_USERNAME }}"
+        SN_PASSWORD: !unsafe "{{ SN_PASSWORD }}"
+
 # -----------------------------------------------------------------------------
 # Projects
 # -----------------------------------------------------------------------------
@@ -131,6 +156,15 @@ controller_credentials:
       RHSM_USERNAME: "{{ rhsm_username }}"
       RHSM_PASSWORD: "{{ rhsm_password }}"
 
+  - name: "ServiceNow PDI"
+    description: "ServiceNow developer instance for ITSM integration"
+    organization: "Default"
+    credential_type: "ServiceNow Credential"
+    inputs:
+      SN_HOST: "{{ servicenow_instance_url }}"
+      SN_USERNAME: "{{ servicenow_username }}"
+      SN_PASSWORD: "{{ servicenow_password }}"
+
 # -----------------------------------------------------------------------------
 # Execution Environments
 # -----------------------------------------------------------------------------
@@ -145,6 +179,17 @@ controller_execution_environments:
 # Job Templates
 # -----------------------------------------------------------------------------
 controller_templates:
+  - name: "Test iDRAC"
+    description: "Non-destructive iDRAC connectivity and EE validation"
+    organization: "Default"
+    job_type: "run"
+    project: "Bare Metal Automation"
+    playbook: "playbooks/test_idrac.yml"
+    inventory: "Bare Metal Deployment"
+    execution_environment: "Bare Metal EE"
+    credentials:
+      - "T620 iDRAC"
+
   - name: "Provision RHEL 9"
     description: "Boot Dell T620 to unattended RHEL 9 ISO via iDRAC BootToNetworkISO over NFS"
     organization: "Default"
@@ -180,23 +225,123 @@ controller_templates:
       - "T620 SSH"
       - "Red Hat Subscription"
 
+  - name: "Update ServiceNow Request"
+    description: "Post a work note to the ServiceNow catalog request item"
+    organization: "Default"
+    job_type: "run"
+    project: "Bare Metal Automation"
+    playbook: "playbooks/update_snow_request.yml"
+    inventory: "Bare Metal Deployment"
+    execution_environment: "Bare Metal EE"
+    credentials:
+      - "ServiceNow PDI"
+
+  - name: "Close ServiceNow Request"
+    description: "Update the ServiceNow catalog request item to Closed Complete"
+    organization: "Default"
+    job_type: "run"
+    project: "Bare Metal Automation"
+    playbook: "playbooks/close_snow_request.yml"
+    inventory: "Bare Metal Deployment"
+    execution_environment: "Bare Metal EE"
+    credentials:
+      - "ServiceNow PDI"
+
 # -----------------------------------------------------------------------------
 # Workflow Templates
 # -----------------------------------------------------------------------------
 controller_workflows:
   - name: "End-to-End Bare Metal Deployment"
-    description: "Provision RHEL 9 on bare metal, then configure the host with a demo application"
+    description: "Provision RHEL 9 on bare metal, configure the host, and update ServiceNow at each stage"
     organization: "Default"
     simplified_workflow_nodes:
+      - identifier: "SNOW — Provisioning Started"
+        unified_job_template: "Update ServiceNow Request"
+        extra_data:
+          snow_message: "[Ansible Automation Platform] Provisioning started — booting to RHEL 9 ISO via iDRAC."
+          snow_state: "2"
+        success_nodes:
+          - "Provision RHEL 9"
+
       - identifier: "Provision RHEL 9"
         unified_job_template: "Provision RHEL 9"
+        success_nodes:
+          - "SNOW — OS Installing"
+
+      - identifier: "SNOW — OS Installing"
+        unified_job_template: "Update ServiceNow Request"
+        extra_data:
+          snow_message: "[Ansible Automation Platform] ISO boot successful — RHEL 9 unattended installation in progress."
+          snow_state: "2"
         success_nodes:
           - "Wait for Install"
 
       - identifier: "Wait for Install"
         unified_job_template: "Wait for Install"
         success_nodes:
+          - "SNOW — Configuring Service"
+
+      - identifier: "SNOW — Configuring Service"
+        unified_job_template: "Update ServiceNow Request"
+        extra_data:
+          snow_message: "[Ansible Automation Platform] OS installation complete — registering with RHSM and deploying application."
+          snow_state: "2"
+        success_nodes:
           - "Configure RHEL 9"
 
       - identifier: "Configure RHEL 9"
         unified_job_template: "Configure RHEL 9"
+        success_nodes:
+          - "Close ServiceNow Request"
+
+      - identifier: "Close ServiceNow Request"
+        unified_job_template: "Close ServiceNow Request"
+
+# =============================================================================
+# Event-Driven Ansible — ServiceNow Integration
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Decision Environments
+# -----------------------------------------------------------------------------
+eda_decision_environments:
+  - name: "ServiceNow DE"
+    description: "Decision environment with servicenow.itsm for catalog request polling"
+    organization: "Default"
+    image_url: "quay.io/crenwick93/snow-de:latest"
+
+# -----------------------------------------------------------------------------
+# EDA Projects
+# -----------------------------------------------------------------------------
+eda_projects:
+  - name: "Bare Metal EDA"
+    description: "EDA rulebooks for bare-metal provisioning triggered by ServiceNow"
+    organization: "Default"
+    url: "{{ git_repo_url }}"
+
+# -----------------------------------------------------------------------------
+# EDA Credentials
+# -----------------------------------------------------------------------------
+eda_credentials:
+  - name: "ServiceNow EDA"
+    description: "ServiceNow credentials for the EDA records source plugin"
+    credential_type: "ServiceNow Credential"
+    organization: "Default"
+    inputs:
+      SN_HOST: "{{ servicenow_instance_url }}"
+      SN_USERNAME: "{{ servicenow_username }}"
+      SN_PASSWORD: "{{ servicenow_password }}"
+
+# -----------------------------------------------------------------------------
+# Rulebook Activations
+# -----------------------------------------------------------------------------
+eda_rulebook_activations:
+  - name: "ServiceNow Bare Metal Requests"
+    description: "Monitors ServiceNow for new Bare Metal Server Request catalog items"
+    organization: "Default"
+    project: "Bare Metal EDA"
+    rulebook: "rulebooks/servicenow_request_rulebook.yml"
+    decision_environment: "ServiceNow DE"
+    enabled: true
+    credentials:
+      - "ServiceNow EDA"

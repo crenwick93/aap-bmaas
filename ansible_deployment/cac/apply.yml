@@ -33,6 +33,10 @@
 
     custom_ee_image: "{{ lookup('env', 'CUSTOM_EE_IMAGE') | default('quay.io/crenwick93/bmaas-ee:latest', true) }}"
 
+    servicenow_instance_url: "{{ lookup('env', 'SERVICENOW_INSTANCE_URL') | default(omit, true) }}"
+    servicenow_username: "{{ lookup('env', 'SERVICENOW_USERNAME') | default(omit, true) }}"
+    servicenow_password: "{{ lookup('env', 'SERVICENOW_PASSWORD') | default(omit, true) }}"
+
   vars_files:
     - vars.yml
   roles:
