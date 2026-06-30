@@ -1,4 +1,19 @@
 ---
+- name: Update ServiceNow — OS installing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Post work note
+      servicenow.itsm.api:
+        resource: sc_req_item
+        action: patch
+        sys_id: "{{ snow_ritm_sys_id }}"
+        data:
+          state: "2"
+          work_notes: "[Ansible Automation Platform] ISO boot successful — RHEL 9 unattended installation in progress."
+      when: snow_ritm_sys_id is defined
+
 - name: Wait for install to complete, detach ISO, and boot into RHEL 9
   hosts: idrac
   gather_facts: false

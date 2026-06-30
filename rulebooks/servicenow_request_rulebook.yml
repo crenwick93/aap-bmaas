@@ -20,8 +20,9 @@
           - sys_id
       condition: event.number is defined
       action:
-        # TEST: trigger Test iDRAC to validate the EDA pipeline
-        # Switch back to run_workflow_template for the full demo
-        run_job_template:
-          name: Test iDRAC
+        run_workflow_template:
+          name: End-to-End Bare Metal Deployment
           organization: Default
+          extra_vars:
+            snow_ritm_sys_id: "{{ event.sys_id }}"
+            snow_ritm_number: "{{ event.number }}"

@@ -198,8 +198,10 @@ controller_templates:
     playbook: "playbooks/provision_rhel9.yml"
     inventory: "Bare Metal Deployment"
     execution_environment: "Bare Metal EE"
+    ask_variables_on_launch: true
     credentials:
       - "T620 iDRAC"
+      - "ServiceNow PDI"
 
   - name: "Wait for Install"
     description: "Wait for power off, detach virtual media, boot to disk, verify RHEL 9"
@@ -209,9 +211,11 @@ controller_templates:
     playbook: "playbooks/wait_for_install.yml"
     inventory: "Bare Metal Deployment"
     execution_environment: "Bare Metal EE"
+    ask_variables_on_launch: true
     credentials:
       - "T620 iDRAC"
       - "T620 SSH"
+      - "ServiceNow PDI"
 
   - name: "Configure RHEL 9"
     description: "Register with RHSM and deploy demo web application"
@@ -221,20 +225,10 @@ controller_templates:
     playbook: "playbooks/configure_rhel9.yml"
     inventory: "Bare Metal Deployment"
     execution_environment: "Bare Metal EE"
+    ask_variables_on_launch: true
     credentials:
       - "T620 SSH"
       - "Red Hat Subscription"
-
-  - name: "Update ServiceNow Request"
-    description: "Post a work note to the ServiceNow catalog request item"
-    organization: "Default"
-    job_type: "run"
-    project: "Bare Metal Automation"
-    playbook: "playbooks/update_snow_request.yml"
-    inventory: "Bare Metal Deployment"
-    execution_environment: "Bare Metal EE"
-    ask_variables_on_launch: true
-    credentials:
       - "ServiceNow PDI"
 
   - name: "Close ServiceNow Request"
@@ -256,38 +250,15 @@ controller_workflows:
   - name: "End-to-End Bare Metal Deployment"
     description: "Provision RHEL 9 on bare metal, configure the host, and update ServiceNow at each stage"
     organization: "Default"
+    ask_variables_on_launch: true
     simplified_workflow_nodes:
-      - identifier: "SNOW — Provisioning Started"
-        unified_job_template: "Update ServiceNow Request"
-        extra_data:
-          snow_message: "[Ansible Automation Platform] Provisioning started — booting to RHEL 9 ISO via iDRAC."
-          snow_state: "2"
-        success_nodes:
-          - "Provision RHEL 9"
-
       - identifier: "Provision RHEL 9"
         unified_job_template: "Provision RHEL 9"
-        success_nodes:
-          - "SNOW — OS Installing"
-
-      - identifier: "SNOW — OS Installing"
-        unified_job_template: "Update ServiceNow Request"
-        extra_data:
-          snow_message: "[Ansible Automation Platform] ISO boot successful — RHEL 9 unattended installation in progress."
-          snow_state: "2"
         success_nodes:
           - "Wait for Install"
 
       - identifier: "Wait for Install"
         unified_job_template: "Wait for Install"
-        success_nodes:
-          - "SNOW — Configuring Service"
-
-      - identifier: "SNOW — Configuring Service"
-        unified_job_template: "Update ServiceNow Request"
-        extra_data:
-          snow_message: "[Ansible Automation Platform] OS installation complete — registering with RHSM and deploying application."
-          snow_state: "2"
         success_nodes:
           - "Configure RHEL 9"
 

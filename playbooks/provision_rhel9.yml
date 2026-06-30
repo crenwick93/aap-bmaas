@@ -1,4 +1,19 @@
 ---
+- name: Update ServiceNow — Provisioning started
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Post work note
+      servicenow.itsm.api:
+        resource: sc_req_item
+        action: patch
+        sys_id: "{{ snow_ritm_sys_id }}"
+        data:
+          state: "2"
+          work_notes: "[Ansible Automation Platform] Provisioning started — booting to RHEL 9 ISO via iDRAC."
+      when: snow_ritm_sys_id is defined
+
 - name: Provision RHEL 9 on Dell T620 via iDRAC BootToNetworkISO
   hosts: idrac
   gather_facts: false

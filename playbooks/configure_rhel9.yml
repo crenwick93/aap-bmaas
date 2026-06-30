@@ -1,4 +1,19 @@
 ---
+- name: Update ServiceNow — Configuring service
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Post work note
+      servicenow.itsm.api:
+        resource: sc_req_item
+        action: patch
+        sys_id: "{{ snow_ritm_sys_id }}"
+        data:
+          state: "2"
+          work_notes: "[Ansible Automation Platform] OS installation complete — registering with RHSM and deploying application."
+      when: snow_ritm_sys_id is defined
+
 - name: Configure freshly provisioned RHEL 9 — deploy demo web app
   hosts: t620
   become: true
