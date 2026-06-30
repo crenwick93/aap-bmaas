@@ -354,6 +354,15 @@ eda_credential_types:
 # EDA Credentials
 # -----------------------------------------------------------------------------
 eda_credentials:
+  - name: "AAP Controller Token"
+    description: "Controller credential so EDA can launch job templates on AAP"
+    credential_type: "Red Hat Ansible Automation Platform"
+    organization: "Default"
+    inputs:
+      host: "https://{{ aap_hostname }}"
+      oauth_token: "{{ aap_token }}"
+      verify_ssl: false
+
   - name: "ServiceNow EDA"
     description: "ServiceNow credentials for the EDA records source plugin"
     credential_type: "ServiceNow Credential"
@@ -375,4 +384,5 @@ eda_rulebook_activations:
     decision_environment: "ServiceNow DE"
     enabled: true
     credentials:
+      - "AAP Controller Token"
       - "ServiceNow EDA"
