@@ -320,6 +320,35 @@ eda_projects:
     description: "EDA rulebooks for bare-metal provisioning triggered by ServiceNow"
     organization: "Default"
     url: "{{ git_repo_url }}"
+    wait: true
+
+# -----------------------------------------------------------------------------
+# EDA Credential Types
+# -----------------------------------------------------------------------------
+eda_credential_types:
+  - name: "ServiceNow Credential"
+    description: "ServiceNow instance access for CMDB and incident management"
+    inputs:
+      fields:
+        - id: SN_HOST
+          type: string
+          label: Snow Instance
+        - id: SN_USERNAME
+          type: string
+          label: Username
+        - id: SN_PASSWORD
+          type: string
+          label: Password
+          secret: true
+      required:
+        - SN_HOST
+        - SN_USERNAME
+        - SN_PASSWORD
+    injectors:
+      env:
+        SN_HOST: !unsafe "{{ SN_HOST }}"
+        SN_USERNAME: !unsafe "{{ SN_USERNAME }}"
+        SN_PASSWORD: !unsafe "{{ SN_PASSWORD }}"
 
 # -----------------------------------------------------------------------------
 # EDA Credentials
