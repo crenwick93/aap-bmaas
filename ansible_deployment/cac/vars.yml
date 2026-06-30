@@ -371,7 +371,7 @@ eda_rulebook_activations:
     description: "Monitors ServiceNow for new Bare Metal Server Request catalog items"
     organization: "Default"
     project: "Bare Metal EDA"
-    rulebook: "rulebooks/servicenow_request_rulebook.yml"
+    rulebook: "servicenow_request_rulebook.yml"
     decision_environment: "ServiceNow DE"
     enabled: true
     credentials:
