@@ -3,12 +3,7 @@
 # AAP Configuration as Code — Bare-Metal RHEL 9 Provisioning
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# Organizations
-# -----------------------------------------------------------------------------
-aap_organizations:
-  - name: "Bare Metal Provisioning"
-    description: "End-to-end bare-metal lifecycle — provision and configure Dell PowerEdge servers"
+# Using the Default organization
 
 # -----------------------------------------------------------------------------
 # Custom Credential Types
@@ -60,7 +55,7 @@ controller_credential_types:
 controller_projects:
   - name: "Bare Metal Automation"
     description: "RHEL 9 provisioning and post-install configuration playbooks"
-    organization: "Bare Metal Provisioning"
+    organization: "Default"
     scm_type: "git"
     scm_url: "{{ git_repo_url }}"
     scm_branch: "main"
@@ -72,7 +67,7 @@ controller_projects:
 controller_inventories:
   - name: "Bare Metal Deployment"
     description: "All hosts involved in bare-metal provisioning and configuration"
-    organization: "Bare Metal Provisioning"
+    organization: "Default"
 
 # -----------------------------------------------------------------------------
 # Hosts
@@ -82,6 +77,8 @@ controller_hosts:
     inventory: "Bare Metal Deployment"
     variables:
       ansible_connection: local
+      iso_share: "192.168.50.251:/srv/iso"
+      iso_image: "t620-demo-baremetal.iso"
 
   - name: "t620-demo"
     inventory: "Bare Metal Deployment"
@@ -111,7 +108,7 @@ controller_groups:
 controller_credentials:
   - name: "T620 iDRAC"
     description: "iDRAC7 root credentials for Dell PowerEdge T620"
-    organization: "Bare Metal Provisioning"
+    organization: "Default"
     credential_type: "Dell iDRAC"
     inputs:
       IDRAC_USER: "root"
@@ -119,7 +116,7 @@ controller_credentials:
 
   - name: "T620 SSH"
     description: "SSH access to the provisioned RHEL 9 host (ansible service account)"
-    organization: "Bare Metal Provisioning"
+    organization: "Default"
     credential_type: "Machine"
     inputs:
       username: ansible
@@ -128,7 +125,7 @@ controller_credentials:
 
   - name: "Red Hat Subscription"
     description: "RHSM credentials for registering provisioned hosts"
-    organization: "Bare Metal Provisioning"
+    organization: "Default"
     credential_type: "RHSM Credentials"
     inputs:
       RHSM_USERNAME: "{{ rhsm_username }}"
@@ -140,7 +137,7 @@ controller_credentials:
 controller_execution_environments:
   - name: "Bare Metal EE"
     description: "Custom EE with omsdk and dellemc.openmanage for iDRAC operations"
-    organization: "Bare Metal Provisioning"
+    organization: "Default"
     image: "{{ custom_ee_image }}"
     pull: "missing"
 
@@ -150,7 +147,7 @@ controller_execution_environments:
 controller_templates:
   - name: "Provision RHEL 9"
     description: "Boot Dell T620 to unattended RHEL 9 ISO via iDRAC BootToNetworkISO over NFS"
-    organization: "Bare Metal Provisioning"
+    organization: "Default"
     job_type: "run"
     project: "Bare Metal Automation"
     playbook: "playbooks/provision_rhel9.yml"
@@ -161,7 +158,7 @@ controller_templates:
 
   - name: "Wait for Install"
     description: "Wait for power off, detach virtual media, boot to disk, verify RHEL 9"
-    organization: "Bare Metal Provisioning"
+    organization: "Default"
     job_type: "run"
     project: "Bare Metal Automation"
     playbook: "playbooks/wait_for_install.yml"
@@ -173,7 +170,7 @@ controller_templates:
 
   - name: "Configure RHEL 9"
     description: "Register with RHSM and deploy demo web application"
-    organization: "Bare Metal Provisioning"
+    organization: "Default"
     job_type: "run"
     project: "Bare Metal Automation"
     playbook: "playbooks/configure_rhel9.yml"
@@ -189,7 +186,7 @@ controller_templates:
 controller_workflows:
   - name: "End-to-End Bare Metal Deployment"
     description: "Provision RHEL 9 on bare metal, then configure the host with a demo application"
-    organization: "Bare Metal Provisioning"
+    organization: "Default"
     simplified_workflow_nodes:
       - identifier: "Provision RHEL 9"
         unified_job_template: "Provision RHEL 9"

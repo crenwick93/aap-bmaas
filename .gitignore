@@ -12,3 +12,6 @@ vault/laptop_ssh_key
 context/
 venv/
 ansible-navigator.log
+context
+collections/
+demo-notes.md

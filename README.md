@@ -1,6 +1,6 @@
 # AAP Bare-Metal RHEL 9 Provisioning via Dell iDRAC7
 
-Provisions RHEL 9 onto a Dell PowerEdge T620 by driving iDRAC7 to boot an unattended ISO served over NFS, then configures the host with a demo web application — all orchestrated from Ansible Automation Platform (AAP) 2.6.
+Provisions RHEL 9 onto a Dell PowerEdge T620 by driving iDRAC7 to boot an unattended ISO served over NFS, then configures the host with a demo web application — all orchestrated from Ansible Automation Platform (AAP).
 
 ## Architecture
 
@@ -50,21 +50,22 @@ Provisions RHEL 9 onto a Dell PowerEdge T620 by driving iDRAC7 to boot an unatte
 │   ┌───────────┐       SSH        ┌───────────────┐                  │
 │   │    AAP     │ ──────────────► │     T620       │                  │
 │   │  (laptop)  │  configure_     │   RHEL 9 +    │                  │
-│   │           │  rhel9.yml      │   demo app    │                  │
+│   │            │  rhel9.yml      │   demo app    │                  │
 │   └───────────┘                  └───────────────┘                  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Prerequisites
+## Environment
 
-| Requirement | Purpose |
+| Item | Value |
 |---|---|
-| `osbuild-composer` + `composer-cli` | Image Builder — builds the golden image ISO |
-| `lorax` (`mkksiso`) | Layers the per-host kickstart onto the golden image |
-| `omsdk` Python package | Required by `dellemc.openmanage` for WSMan/iDRAC communication |
-| `dellemc.openmanage` collection (9.x) | Ansible collection with `idrac_os_deployment` module |
-| `nfs-utils` | Serves the ISO to iDRAC over NFS |
-| `infra.aap_configuration` collection | Configuration as Code — creates all AAP objects |
+| Server | Dell PowerEdge T620 (12th gen) |
+| iDRAC | iDRAC7 Enterprise, firmware 2.65.65.65 |
+| iDRAC IP | `192.168.50.252` |
+| T620 target IP | `192.168.50.253` |
+| AAP / NFS host IP | `192.168.50.251` |
+| NFS share | `/srv/iso` |
+| AAP | 2.5+ (containerized), `https://aaponprem.chrislab.dev` |
 
 ### Why RHEL 9 and not RHEL 10?
 
@@ -74,64 +75,37 @@ The T620 uses Xeon E5-2600 v1/v2 (Sandy/Ivy Bridge), which is `x86-64-v2`. RHEL 
 
 iDRAC7's Redfish implementation is too limited for OS deployment. The `dellemc.openmanage.idrac_os_deployment` module with `BootToNetworkISO` uses WSMan via OMSDK, which fully supports iDRAC7.
 
-## Environment
+## Prerequisites
 
-| Item | Value |
+| Requirement | Purpose |
 |---|---|
-| Server | Dell PowerEdge T620 (12th gen) |
-| iDRAC | iDRAC7 Enterprise, firmware 2.65.65.65 |
-| iDRAC IP | `192.168.50.252` |
-| AAP / NFS host IP | `192.168.50.251` |
-| NFS share | `/srv/iso` |
-| AAP | 2.6 (containerized), `https://aaponprem.chrislab.dev` |
+| `osbuild-composer` + `composer-cli` | Image Builder — builds the golden image ISO |
+| `lorax` (`mkksiso`) | Layers the per-host kickstart onto the golden image |
+| `nfs-utils` | Serves the ISO to iDRAC over NFS |
+| `ansible-builder` + `podman` | Builds the custom Execution Environment |
+| `ansible-navigator` | Runs playbooks locally inside the EE |
 
-## Playbooks
-
-| Playbook | Target | Purpose |
-|---|---|---|
-| `playbooks/prepare_environment.yml` | localhost | Builds golden image, generates kickstarts, builds ISOs, configures NFS |
-| `playbooks/provision_rhel9.yml` | iDRAC (`192.168.50.252`) | Mounts ISO over NFS and boots unattended RHEL 9 install |
-| `playbooks/wait_for_install.yml` | T620 host | Polls SSH until the host comes online, confirms RHEL 9 |
-| `playbooks/configure_rhel9.yml` | T620 host | Installs httpd, deploys a demo landing page, opens firewall |
-| `playbooks/test_idrac.yml` | iDRAC (`192.168.50.252`) | Non-invasive EE and connectivity test |
-
-## Step-by-step
+## Quick start — full demo setup
 
 ### 1. Set credentials
 
-Copy the example environment file and fill in the blanks:
-
 ```bash
 cp .env.example .env
-# Edit .env — set AAP_TOKEN and IDRAC_PASSWORD
 ```
 
-Set the root password hash in the inventory (used by kickstart generation):
+Edit `.env` and fill in:
 
-```bash
-# Generate a hash
-python3 -c 'import crypt; print(crypt.crypt("YourDemoPass", crypt.mksalt(crypt.METHOD_SHA512)))'
+| Variable | Description |
+|---|---|
+| `AAP_HOSTNAME` | AAP gateway URL (e.g. `https://aaponprem.chrislab.dev`) |
+| `AAP_TOKEN` | AAP OAuth2 personal access token |
+| `IDRAC_PASSWORD` | iDRAC root password |
+| `RHSM_USERNAME` | Red Hat Subscription Manager username |
+| `RHSM_PASSWORD` | Red Hat Subscription Manager password |
 
-# Paste the output into inventory.ini under [servers]
-# t620-demo ks_hostname=t620-demo ks_root_password_hash=<paste here>
-```
+### 2. Prepare the environment (build phase)
 
-Encrypt the iDRAC vault:
-
-```bash
-ansible-vault encrypt vault/idrac_secrets.yml
-```
-
-### 2. Install Ansible dependencies
-
-```bash
-pip install -r requirements.txt
-ansible-galaxy collection install -r collections/requirements.yml
-```
-
-### 3. Prepare the environment
-
-This single playbook handles the entire build phase — golden image, kickstarts, ISOs, and NFS:
+This runs on the AAP/NFS host and handles the entire build phase — golden image, kickstarts, ISOs, and NFS:
 
 ```bash
 ansible-playbook playbooks/prepare_environment.yml
@@ -150,18 +124,74 @@ To skip the golden image build and use a stock RHEL 9 DVD instead:
 ansible-playbook playbooks/prepare_environment.yml -e golden_image_build=false -e stock_iso=/path/to/rhel-9-dvd.iso
 ```
 
-### 4. Provision and configure
+### 3. Build and push the Execution Environment
+
+All provisioning playbooks run inside a custom EE that includes `omsdk`, `dellemc.openmanage`, and `ansible.posix`. No local Python dependencies needed.
+
+```bash
+ansible-builder build -f ansible_deployment/ee/execution-environment.yml -t quay.io/crenwick93/bmaas-ee:latest
+podman push quay.io/crenwick93/bmaas-ee:latest
+```
+
+### 4. Configure AAP (Configuration as Code)
+
+Install the required collections:
+
+```bash
+ansible-galaxy collection install -r ansible_deployment/cac/requirements.yml
+```
+
+Run the CaC script:
+
+```bash
+./ansible_deployment/scripts/cac-apply.sh
+```
+
+This creates all AAP objects in a single run:
+
+| Object | Details |
+|---|---|
+| **Credential Types** | Dell iDRAC, RHSM Credentials |
+| **Credentials** | T620 iDRAC, T620 SSH, Red Hat Subscription |
+| **Execution Environment** | Bare Metal EE (`quay.io/crenwick93/bmaas-ee:latest`) |
+| **Project** | Bare Metal Automation (this Git repo, syncs on launch) |
+| **Inventory** | Bare Metal Deployment (iDRAC + T620 hosts with groups) |
+| **Job Templates** | Provision RHEL 9, Wait for Install, Configure RHEL 9 |
+| **Workflow** | End-to-End Bare Metal Deployment (provision → wait → configure) |
+
+### 5. Run the demo
+
+Launch the **End-to-End Bare Metal Deployment** workflow from the AAP UI. It runs three steps in sequence:
+
+1. **Provision RHEL 9** — tells iDRAC to mount the ISO over NFS and boot
+2. **Wait for Install** — polls until the server powers off, then boots from disk and waits for SSH
+3. **Configure RHEL 9** — registers with RHSM, installs httpd, deploys the demo landing page
+
+Once complete, browse to `http://192.168.50.253` to see the demo app.
+
+## Running locally (without AAP)
+
+You can also run the provisioning playbooks directly using `ansible-navigator`:
 
 ```bash
 # Provision — triggers iDRAC BootToNetworkISO
-ansible-playbook playbooks/provision_rhel9.yml --ask-vault-pass
+ansible-navigator run playbooks/provision_rhel9.yml
 
-# Wait for install to complete (polls SSH)
-ansible-playbook playbooks/wait_for_install.yml
+# Wait for install to complete
+ansible-navigator run playbooks/wait_for_install.yml
 
 # Configure — deploy demo app
-ansible-playbook playbooks/configure_rhel9.yml
+ansible-navigator run playbooks/configure_rhel9.yml
 ```
+
+## Playbooks
+
+| Playbook | Target | Purpose |
+|---|---|---|
+| `playbooks/prepare_environment.yml` | localhost | Builds golden image, generates kickstarts, builds ISOs, configures NFS |
+| `playbooks/provision_rhel9.yml` | iDRAC (`192.168.50.252`) | Mounts ISO over NFS and boots unattended RHEL 9 install |
+| `playbooks/wait_for_install.yml` | iDRAC → T620 | Polls for power off, boots from disk, verifies RHEL 9 over SSH |
+| `playbooks/configure_rhel9.yml` | T620 host | Registers with RHSM, installs httpd, deploys demo landing page |
 
 ## Golden image
 
@@ -174,68 +204,37 @@ The golden image is defined in `golden-image/blueprint.toml` and built by Image 
 
 The per-host kickstart (`kickstart/ks.cfg.j2`) is intentionally minimal — only hostname, network, disk layout, and root password. Everything else is baked into the golden image.
 
-To add more servers, add entries to the `[servers]` group in `inventory.ini`:
+## Project structure
 
-```ini
-[servers]
-t620-demo   ks_hostname=t620-demo   ks_root_password_hash=$6$...
-r730-web01  ks_hostname=r730-web01  ks_ip=10.0.1.20  ks_gateway=10.0.1.1  ks_root_password_hash=$6$...
 ```
-
-Then re-run `ansible-playbook playbooks/prepare_environment.yml` — one ISO per host is generated automatically.
-
-## AAP wiring (Configuration as Code)
-
-The `ansible_deployment/` directory automates AAP setup using `infra.aap_configuration`. One script creates all objects:
-
-### Quick start
-
-1. Fill in `.env` (see `.env.example`)
-
-2. Install the CaC collection:
-
-```bash
-ansible-galaxy collection install infra.aap_configuration
+├── .env.example                          # Template for credentials
+├── ansible.cfg                           # Ansible config (inventory, collections path)
+├── inventory.ini                         # Local inventory (iDRAC, T620, servers)
+├── group_vars/
+│   └── idrac.yml                         # ISO share and image vars for iDRAC hosts
+├── golden-image/
+│   └── blueprint.toml                    # Image Builder blueprint
+├── kickstart/
+│   └── ks.cfg.j2                         # Kickstart Jinja2 template
+├── playbooks/
+│   ├── prepare_environment.yml           # Build phase (golden image, ISOs, NFS)
+│   ├── provision_rhel9.yml               # Boot to ISO via iDRAC
+│   ├── wait_for_install.yml              # Wait for install, boot from disk
+│   └── configure_rhel9.yml              # Post-install config + demo app
+├── ansible_deployment/
+│   ├── ee/
+│   │   └── execution-environment.yml     # Custom EE definition (omsdk, openmanage)
+│   ├── cac/
+│   │   ├── apply.yml                     # CaC entry playbook
+│   │   ├── vars.yml                      # All AAP object definitions
+│   │   ├── requirements.yml              # Collections needed for CaC
+│   │   └── execution-environment.yml     # CaC EE definition (unused — runs locally)
+│   └── scripts/
+│       └── cac-apply.sh                  # Wrapper script to apply CaC
+└── vault/
+    ├── idrac_secrets.yml                 # Local-only iDRAC credentials (gitignored)
+    └── laptop_ssh_key                    # SSH private key for T620 (gitignored)
 ```
-
-3. Run:
-
-```bash
-./ansible_deployment/scripts/cac-apply.sh
-```
-
-This creates in AAP:
-- **Organization:** Bare Metal Provisioning
-- **Project:** Bare Metal Automation (this Git repo)
-- **Inventories:** iDRAC Management + Bare Metal Hosts
-- **Credentials:** Dell iDRAC (custom type) + T620 SSH (Machine)
-- **Execution Environment:** Bare Metal EE (custom image with `omsdk` + `dellemc.openmanage`)
-- **Job Templates:** Provision RHEL 9, Wait for Install, Configure RHEL 9
-- **Workflow:** End-to-End Bare Metal Deployment (provision > wait > configure)
-
-### Custom Execution Environment
-
-All playbooks run inside a custom EE that includes `omsdk`, `dellemc.openmanage`, and `ansible.posix`. No local Python dependencies are needed — everything runs in the container.
-
-**Build the EE** (requires `ansible-builder` and `podman`):
-
-```bash
-ansible-builder build -f ansible_deployment/ee/execution-environment.yml -t quay.io/crenwick93/bmaas-ee:latest
-```
-
-**Push to registry** so AAP can pull it:
-
-```bash
-podman push quay.io/crenwick93/bmaas-ee:latest
-```
-
-**Test locally** with `ansible-navigator` (runs inside the EE, nothing installed on your machine):
-
-```bash
-ansible-navigator run playbooks/test_idrac.yml
-```
-
-The EE definition is at `ansible_deployment/ee/execution-environment.yml`. The `context/` directory generated by `ansible-builder` is a build artifact and is excluded from Git.
 
 ## Troubleshooting
 
@@ -243,4 +242,5 @@ The EE definition is at `ansible_deployment/ee/execution-environment.yml`. The `
 - **Lifecycle Controller:** Confirm it is enabled (F10 at boot, or via iDRAC Settings). It is the engine for `BootToNetworkISO`.
 - **SELinux:** If NFS mounts fail silently, check `setsebool -P nfs_export_all_ro 1` was applied.
 - **Firewall:** Ensure `nfs`, `mountd`, and `rpc-bind` services are open in `firewalld`.
-- **T620 IP after install:** The kickstart uses DHCP (`--device=link`). Check your router/DHCP server for the lease, or look at the iDRAC console to find the assigned IP.
+- **T620 IP after install:** The kickstart uses static IP `192.168.50.253`. Verify this is free on the network before provisioning.
+- **EE not pulling:** If AAP can't pull the EE image, check that `podman push` succeeded and the registry is accessible from the AAP host.

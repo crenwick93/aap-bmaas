@@ -7,8 +7,11 @@ set -euo pipefail
 # Usage:
 #   ./ansible_deployment/scripts/cac-apply.sh
 #
+# Prerequisites:
+#   ansible-galaxy collection install -r ansible_deployment/cac/requirements.yml
+#
 # Required env (from top-level .env):
-#   AAP_HOSTNAME          — AAP 2.6 gateway URL (e.g. https://aaponprem.chrislab.dev)
+#   AAP_HOSTNAME          — AAP gateway URL (e.g. https://aaponprem.chrislab.dev)
 #   AAP_TOKEN             — AAP OAuth2 token
 #   IDRAC_PASSWORD        — iDRAC root password
 #
@@ -26,11 +29,6 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
   echo "Loading environment from ${REPO_ROOT}/.env"
   # shellcheck disable=SC2046
   export $(grep -v '^#' "${REPO_ROOT}/.env" | xargs -I{} echo {})
-fi
-
-if ! command -v ansible-playbook >/dev/null 2>&1; then
-  echo "Error: ansible-playbook not found. Install Ansible first."
-  exit 1
 fi
 
 ansible-playbook "${PLAYBOOK}" "$@"

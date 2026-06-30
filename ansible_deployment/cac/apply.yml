@@ -11,8 +11,15 @@
     aap_token: "{{ lookup('env', 'AAP_TOKEN') | default(omit, true) }}"
     aap_validate_certs: "{{ (lookup('env', 'AAP_VALIDATE_CERTS') | default('false', true)) | bool }}"
 
+    controller_host: "{{ aap_hostname }}"
+    controller_oauthtoken: "{{ aap_token }}"
+    controller_validate_certs: "{{ aap_validate_certs }}"
+
+
     aap_configuration_secure_logging: false
     aap_configuration_collect_logs: true
+    aap_configuration_async_retries: 60
+    aap_configuration_async_delay: 5
 
     idrac_password: "{{ lookup('env', 'IDRAC_PASSWORD') | default(omit, true) }}"
 
