@@ -359,9 +359,9 @@ eda_credentials:
     credential_type: "Red Hat Ansible Automation Platform"
     organization: "Default"
     inputs:
-      host: "https://{{ aap_hostname }}"
+      host: "{{ (aap_hostname | regex_replace('/+$','')) ~ '/api/controller/' }}"
       oauth_token: "{{ aap_token }}"
-      verify_ssl: false
+      verify_ssl: "{{ aap_validate_certs }}"
 
   - name: "ServiceNow EDA"
     description: "ServiceNow credentials for the EDA records source plugin"
@@ -383,6 +383,6 @@ eda_rulebook_activations:
     rulebook: "servicenow_request_rulebook.yml"
     decision_environment: "ServiceNow DE"
     enabled: true
-    credentials:
+    eda_credentials:
       - "AAP Controller Token"
       - "ServiceNow EDA"
