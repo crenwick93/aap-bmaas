@@ -4,6 +4,12 @@
   connection: local
   gather_facts: false
   tasks:
+    - name: Resolve SNOW vars from EDA event
+      ansible.builtin.set_fact:
+        snow_ritm_sys_id: "{{ ansible_eda.event.sys_id }}"
+        snow_ritm_number: "{{ ansible_eda.event.number }}"
+      when: snow_ritm_sys_id is not defined and ansible_eda is defined
+
     - name: Post work note
       servicenow.itsm.api:
         resource: sc_req_item
