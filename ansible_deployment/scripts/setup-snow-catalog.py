@@ -137,28 +137,16 @@ def main():
         "Bare Metal Provisioning Plan"
     )
 
-    delivery_tasks = [
-        ("Provision RHEL 9",
-         "Boot server to RHEL 9 unattended ISO via iDRAC",
-         100),
-        ("Install Operating System",
-         "Wait for OS installation to complete and verify RHEL 9 is online",
-         200),
-        ("Configure & Deploy Application",
-         "Register with RHSM and deploy demo web application",
-         300),
-    ]
-    for short_desc, description, order in delivery_tasks:
-        get_or_create(
-            client, "sc_cat_item_delivery_task",
-            f"short_description={short_desc}^delivery_plan={plan_id}",
-            {"short_description": short_desc,
-             "description": description,
-             "delivery_plan": plan_id,
-             "expected_duration": "1970-01-02 00:00:00",
-             "order": order},
-            f"Delivery task: {short_desc}"
-        )
+    get_or_create(
+        client, "sc_cat_item_delivery_task",
+        f"short_description=Provision & Configure Server^delivery_plan={plan_id}",
+        {"short_description": "Provision & Configure Server",
+         "description": "Provision bare-metal RHEL 9 via iDRAC, install OS, register with RHSM, and deploy application",
+         "delivery_plan": plan_id,
+         "expected_duration": "1970-01-02 00:00:00",
+         "order": 100},
+        "Delivery task: Provision & Configure Server"
+    )
     print()
 
     # 4. Create catalog item with approval and execution plan

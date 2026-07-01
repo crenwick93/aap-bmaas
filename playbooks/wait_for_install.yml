@@ -1,5 +1,5 @@
 ---
-- name: ServiceNow — Open "Install Operating System" task
+- name: ServiceNow — Waiting for OS install
   hosts: localhost
   connection: local
   gather_facts: false
@@ -10,30 +10,29 @@
         snow_ritm_number: "{{ ansible_eda.event.number }}"
       when: snow_ritm_sys_id is not defined and ansible_eda is defined
 
-    - name: Find the Install task
+    - name: Find the task
       servicenow.itsm.api:
         resource: sc_task
         action: get
         query:
           request_item: "{{ snow_ritm_sys_id }}"
-          short_description: "Install Operating System"
+          short_description: "Provision & Configure Server"
       register: snow_task
       when: snow_ritm_sys_id is defined
 
-    - name: Set task to Work in Progress
+    - name: Save task sys_id
+      ansible.builtin.set_fact:
+        snow_task_id: "{{ snow_task.record[0].sys_id }}"
+      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
+
+    - name: Post progress
       servicenow.itsm.api:
         resource: sc_task
         action: patch
-        sys_id: "{{ snow_task.record[0].sys_id }}"
+        sys_id: "{{ snow_task_id }}"
         data:
-          state: "2"
-          work_notes: "[AAP] ISO boot successful — RHEL 9 unattended installation in progress."
-      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
-
-    - name: Save task sys_id for later
-      ansible.builtin.set_fact:
-        snow_install_task_id: "{{ snow_task.record[0].sys_id }}"
-      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
+          work_notes: "[AAP] Waiting for RHEL 9 installation to complete."
+      when: snow_task_id is defined
 
 - name: Wait for install to complete, detach ISO, and boot into RHEL 9
   hosts: idrac
@@ -111,17 +110,16 @@
           {{ ansible_processor_vcpus }} vCPUs,
           {{ ansible_memtotal_mb }} MB RAM
 
-- name: ServiceNow — Close "Install Operating System" task
+- name: ServiceNow — OS installed and verified
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Close task
+    - name: Post progress
       servicenow.itsm.api:
         resource: sc_task
         action: patch
-        sys_id: "{{ snow_install_task_id }}"
+        sys_id: "{{ snow_task_id }}"
         data:
-          state: "3"
-          work_notes: "[AAP] RHEL 9 installed and verified — server is online."
-      when: snow_install_task_id is defined
+          work_notes: "[AAP] RHEL 9 installed and verified — server is online. Starting configuration."
+      when: snow_task_id is defined
