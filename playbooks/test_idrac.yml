@@ -29,7 +29,7 @@
         sys_id: "{{ snow_task_id }}"
         data:
           state: "2"
-          comments: "[AAP] Testing iDRAC connectivity and validating execution environment."
+          work_notes: "[AAP] Testing iDRAC connectivity and validating execution environment."
       when: snow_task_id is defined
 
 - name: Test iDRAC connectivity and EE module availability
@@ -65,5 +65,5 @@
         action: patch
         sys_id: "{{ snow_task_id }}"
         data:
-          comments: "[AAP] iDRAC connectivity test passed — server is reachable and EE is functional."
+          work_notes: "[AAP] iDRAC connectivity test passed — server is reachable and EE is functional."
       when: snow_task_id is defined

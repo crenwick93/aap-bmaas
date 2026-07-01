@@ -29,7 +29,7 @@
         sys_id: "{{ snow_task_id }}"
         data:
           state: "2"
-          comments: "[AAP] Provisioning started — booting to RHEL 9 ISO via iDRAC."
+          work_notes: "[AAP] Provisioning started — booting to RHEL 9 ISO via iDRAC."
       when: snow_task_id is defined
 
 - name: Provision RHEL 9 on Dell T620 via iDRAC BootToNetworkISO
@@ -79,5 +79,5 @@
         action: patch
         sys_id: "{{ snow_task_id }}"
         data:
-          comments: "[AAP] ISO boot complete — RHEL 9 unattended installation in progress."
+          work_notes: "[AAP] ISO boot complete — RHEL 9 unattended installation in progress."
       when: snow_task_id is defined
