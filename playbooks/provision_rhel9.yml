@@ -11,19 +11,16 @@
       when: snow_ritm_sys_id is not defined and ansible_eda is defined
 
     - name: Find the task
-      servicenow.itsm.api:
+      servicenow.itsm.api_info:
         resource: sc_task
-        action: get
-        query:
-          request_item: "{{ snow_ritm_sys_id }}"
-          short_description: "Provision & Configure Server"
+        sysparm_query: "request_item={{ snow_ritm_sys_id }}^short_description=Provision & Configure Server"
       register: snow_task
       when: snow_ritm_sys_id is defined
 
     - name: Save task sys_id
       ansible.builtin.set_fact:
         snow_task_id: "{{ snow_task.record[0].sys_id }}"
-      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
+      when: snow_ritm_sys_id is defined and (snow_task.record | default([])) | length > 0
 
     - name: Set task to Work in Progress
       servicenow.itsm.api:
