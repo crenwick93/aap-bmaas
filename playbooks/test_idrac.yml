@@ -1,5 +1,5 @@
 ---
-- name: Update ServiceNow — iDRAC test in progress
+- name: ServiceNow — iDRAC test in progress
   hosts: localhost
   connection: local
   gather_facts: false
@@ -10,15 +10,30 @@
         snow_ritm_number: "{{ ansible_eda.event.number }}"
       when: snow_ritm_sys_id is not defined and ansible_eda is defined
 
-    - name: Post work note
+    - name: Find the task
       servicenow.itsm.api:
-        resource: sc_req_item
+        resource: sc_task
+        action: get
+        query:
+          request_item: "{{ snow_ritm_sys_id }}"
+          short_description: "Provision & Configure Server"
+      register: snow_task
+      when: snow_ritm_sys_id is defined
+
+    - name: Save task sys_id
+      ansible.builtin.set_fact:
+        snow_task_id: "{{ snow_task.record[0].sys_id }}"
+      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
+
+    - name: Set task to Work in Progress
+      servicenow.itsm.api:
+        resource: sc_task
         action: patch
-        sys_id: "{{ snow_ritm_sys_id }}"
+        sys_id: "{{ snow_task_id }}"
         data:
           state: "2"
-          work_notes: "[Ansible Automation Platform] Testing iDRAC connectivity and validating execution environment."
-      when: snow_ritm_sys_id is defined
+          work_notes: "[AAP] Testing iDRAC connectivity and validating execution environment."
+      when: snow_task_id is defined
 
 - name: Test iDRAC connectivity and EE module availability
   hosts: idrac
@@ -42,16 +57,16 @@
       ansible.builtin.debug:
         var: system_info
 
-- name: Update ServiceNow — iDRAC test complete
+- name: ServiceNow — iDRAC test complete
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Post work note
+    - name: Post completion
       servicenow.itsm.api:
-        resource: sc_req_item
+        resource: sc_task
         action: patch
-        sys_id: "{{ snow_ritm_sys_id }}"
+        sys_id: "{{ snow_task_id }}"
         data:
-          work_notes: "[Ansible Automation Platform] iDRAC connectivity test passed — server is reachable and EE is functional."
-      when: snow_ritm_sys_id is defined
+          work_notes: "[AAP] iDRAC connectivity test passed — server is reachable and EE is functional."
+      when: snow_task_id is defined
