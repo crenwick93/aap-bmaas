@@ -1,4 +1,19 @@
 ---
+- name: Update ServiceNow — iDRAC test in progress
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Post work note
+      servicenow.itsm.api:
+        resource: sc_req_item
+        action: patch
+        sys_id: "{{ snow_ritm_sys_id }}"
+        data:
+          state: "2"
+          work_notes: "[Ansible Automation Platform] Testing iDRAC connectivity and validating execution environment."
+      when: snow_ritm_sys_id is defined
+
 - name: Test iDRAC connectivity and EE module availability
   hosts: idrac
   gather_facts: false
@@ -20,3 +35,17 @@
     - name: Show system info
       ansible.builtin.debug:
         var: system_info
+
+- name: Update ServiceNow — iDRAC test complete
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Post work note
+      servicenow.itsm.api:
+        resource: sc_req_item
+        action: patch
+        sys_id: "{{ snow_ritm_sys_id }}"
+        data:
+          work_notes: "[Ansible Automation Platform] iDRAC connectivity test passed — server is reachable and EE is functional."
+      when: snow_ritm_sys_id is defined

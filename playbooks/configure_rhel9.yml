@@ -173,3 +173,21 @@
       ansible.builtin.systemd:
         name: httpd
         state: restarted
+
+- name: Update ServiceNow — Closed Complete
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Close RITM
+      servicenow.itsm.api:
+        resource: sc_req_item
+        action: patch
+        sys_id: "{{ snow_ritm_sys_id }}"
+        data:
+          state: "3"
+          close_notes: >-
+            Server provisioned and configured by Ansible Automation Platform.
+            RHEL 9 installed via iDRAC, registered with RHSM, and demo
+            application deployed. Workflow completed successfully.
+      when: snow_ritm_sys_id is defined

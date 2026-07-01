@@ -107,14 +107,21 @@ def main():
     catalog_id = catalogs[0]["sys_id"]
     print(f"  [found] Service Catalog ({catalog_id})\n")
 
-    # 2. Create category
-    print("2. Setting up category ...")
+    # 2. Find the Hardware parent category, then create sub-category
+    print("2. Setting up category under Hardware ...")
+    hw_cats = client.get("sc_category", "title=Hardware^sc_catalog=" + catalog_id)
+    if not hw_cats:
+        sys.exit("ERROR: 'Hardware' category not found in Service Catalog")
+    hw_category_id = hw_cats[0]["sys_id"]
+    print(f"  [found] Hardware category ({hw_category_id})")
+
     category_id = get_or_create(
         client, "sc_category",
-        "title=Bare Metal Provisioning",
+        "title=Bare Metal Provisioning^parent=" + hw_category_id,
         {"title": "Bare Metal Provisioning",
          "description": "Request physical server provisioning via Ansible Automation Platform",
          "sc_catalog": catalog_id,
+         "parent": hw_category_id,
          "active": "true"},
         "Bare Metal Provisioning category"
     )

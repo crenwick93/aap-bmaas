@@ -187,8 +187,10 @@ controller_templates:
     playbook: "playbooks/test_idrac.yml"
     inventory: "Bare Metal Deployment"
     execution_environment: "Bare Metal EE"
+    ask_variables_on_launch: true
     credentials:
       - "T620 iDRAC"
+      - "ServiceNow PDI"
 
   - name: "Provision RHEL 9"
     description: "Boot Dell T620 to unattended RHEL 9 ISO via iDRAC BootToNetworkISO over NFS"
@@ -231,18 +233,6 @@ controller_templates:
       - "Red Hat Subscription"
       - "ServiceNow PDI"
 
-  - name: "Close ServiceNow Request"
-    description: "Update the ServiceNow catalog request item to Closed Complete"
-    organization: "Default"
-    job_type: "run"
-    project: "Bare Metal Automation"
-    playbook: "playbooks/close_snow_request.yml"
-    inventory: "Bare Metal Deployment"
-    execution_environment: "Bare Metal EE"
-    ask_variables_on_launch: true
-    credentials:
-      - "ServiceNow PDI"
-
 # -----------------------------------------------------------------------------
 # Workflow Templates
 # -----------------------------------------------------------------------------
@@ -264,11 +254,6 @@ controller_workflows:
 
       - identifier: "Configure RHEL 9"
         unified_job_template: "Configure RHEL 9"
-        success_nodes:
-          - "Close ServiceNow Request"
-
-      - identifier: "Close ServiceNow Request"
-        unified_job_template: "Close ServiceNow Request"
 
 # =============================================================================
 # Event-Driven Ansible — ServiceNow Integration
