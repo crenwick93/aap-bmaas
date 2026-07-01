@@ -31,7 +31,7 @@
         action: patch
         sys_id: "{{ snow_task_id }}"
         data:
-          work_notes: "[AAP] Registering with RHSM and deploying application."
+          work_notes: "[AAP] Configuring server — applying post-install configuration and deploying application."
       when: snow_task_id is defined
 
 - name: Configure freshly provisioned RHEL 9 — deploy demo web app
