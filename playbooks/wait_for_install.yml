@@ -28,7 +28,7 @@
         action: patch
         sys_id: "{{ snow_task_id }}"
         data:
-          work_notes: "[AAP] Waiting for RHEL 9 installation to complete."
+          comments: "[AAP] Waiting for RHEL 9 installation to complete."
       when: snow_task_id is defined
 
 - name: Wait for install to complete, detach ISO, and boot into RHEL 9
@@ -118,5 +118,5 @@
         action: patch
         sys_id: "{{ snow_task_id }}"
         data:
-          work_notes: "[AAP] RHEL 9 installed and verified — server is online. Starting configuration."
+          comments: "[AAP] RHEL 9 installed and verified — server is online. Starting configuration."
       when: snow_task_id is defined
