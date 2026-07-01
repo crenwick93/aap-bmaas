@@ -8,7 +8,7 @@
         interval: 30
         remote_servicenow_timezone: "Europe/London"
         sysparm_query: >
-          state=1^cat_item.name=Bare Metal Server Request^ORDERBYDESCsys_created_on
+          state=1^approval=approved^cat_item.name=Bare Metal Server Request^ORDERBYDESCsys_created_on
       filters:
         - ansible.eda.json_filter:
         - ansible.eda.normalize_keys:

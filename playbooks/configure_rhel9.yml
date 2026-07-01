@@ -1,18 +1,33 @@
 ---
-- name: Update ServiceNow — Configuring service
+- name: ServiceNow — Open "Configure & Deploy Application" task
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Post work note
+    - name: Find the Configure task
       servicenow.itsm.api:
-        resource: sc_req_item
+        resource: sc_task
+        action: get
+        query:
+          request_item: "{{ snow_ritm_sys_id }}"
+          short_description: "Configure & Deploy Application"
+      register: snow_task
+      when: snow_ritm_sys_id is defined
+
+    - name: Set task to Work in Progress
+      servicenow.itsm.api:
+        resource: sc_task
         action: patch
-        sys_id: "{{ snow_ritm_sys_id }}"
+        sys_id: "{{ snow_task.record[0].sys_id }}"
         data:
           state: "2"
-          work_notes: "[Ansible Automation Platform] OS installation complete — registering with RHSM and deploying application."
-      when: snow_ritm_sys_id is defined
+          work_notes: "[AAP] Registering with RHSM and deploying application."
+      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
+
+    - name: Save task sys_id for later
+      ansible.builtin.set_fact:
+        snow_configure_task_id: "{{ snow_task.record[0].sys_id }}"
+      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
 
 - name: Configure freshly provisioned RHEL 9 — deploy demo web app
   hosts: t620
@@ -174,11 +189,21 @@
         name: httpd
         state: restarted
 
-- name: Update ServiceNow — Closed Complete
+- name: ServiceNow — Close task and RITM
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
+    - name: Close Configure task
+      servicenow.itsm.api:
+        resource: sc_task
+        action: patch
+        sys_id: "{{ snow_configure_task_id }}"
+        data:
+          state: "3"
+          work_notes: "[AAP] Application deployed and verified — configuration complete."
+      when: snow_configure_task_id is defined
+
     - name: Close RITM
       servicenow.itsm.api:
         resource: sc_req_item

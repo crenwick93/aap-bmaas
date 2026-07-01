@@ -1,18 +1,33 @@
 ---
-- name: Update ServiceNow — Provisioning started
+- name: ServiceNow — Open "Provision RHEL 9" task
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Post work note
+    - name: Find the Provision task
       servicenow.itsm.api:
-        resource: sc_req_item
+        resource: sc_task
+        action: get
+        query:
+          request_item: "{{ snow_ritm_sys_id }}"
+          short_description: "Provision RHEL 9"
+      register: snow_task
+      when: snow_ritm_sys_id is defined
+
+    - name: Set task to Work in Progress
+      servicenow.itsm.api:
+        resource: sc_task
         action: patch
-        sys_id: "{{ snow_ritm_sys_id }}"
+        sys_id: "{{ snow_task.record[0].sys_id }}"
         data:
           state: "2"
-          work_notes: "[Ansible Automation Platform] Provisioning started — booting to RHEL 9 ISO via iDRAC."
-      when: snow_ritm_sys_id is defined
+          work_notes: "[AAP] Provisioning started — booting to RHEL 9 ISO via iDRAC."
+      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
+
+    - name: Save task sys_id for later
+      ansible.builtin.set_fact:
+        snow_provision_task_id: "{{ snow_task.record[0].sys_id }}"
+      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
 
 - name: Provision RHEL 9 on Dell T620 via iDRAC BootToNetworkISO
   hosts: idrac
@@ -49,3 +64,18 @@
     - name: Show deployment job result
       ansible.builtin.debug:
         var: osd_result
+
+- name: ServiceNow — Close "Provision RHEL 9" task
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Close task
+      servicenow.itsm.api:
+        resource: sc_task
+        action: patch
+        sys_id: "{{ snow_provision_task_id }}"
+        data:
+          state: "3"
+          work_notes: "[AAP] ISO boot complete — server is installing RHEL 9."
+      when: snow_provision_task_id is defined

@@ -127,8 +127,42 @@ def main():
     )
     print()
 
-    # 3. Create catalog item
-    print("3. Setting up catalog item ...")
+    # 3. Create execution plan
+    print("3. Setting up execution plan ...")
+    plan_id = get_or_create(
+        client, "sc_cat_item_delivery_plan",
+        "name=Bare Metal Provisioning Plan",
+        {"name": "Bare Metal Provisioning Plan",
+         "short_description": "End-to-end bare metal RHEL 9 provisioning via AAP"},
+        "Bare Metal Provisioning Plan"
+    )
+
+    delivery_tasks = [
+        ("Provision RHEL 9",
+         "Boot server to RHEL 9 unattended ISO via iDRAC",
+         100),
+        ("Install Operating System",
+         "Wait for OS installation to complete and verify RHEL 9 is online",
+         200),
+        ("Configure & Deploy Application",
+         "Register with RHSM and deploy demo web application",
+         300),
+    ]
+    for short_desc, description, order in delivery_tasks:
+        get_or_create(
+            client, "sc_cat_item_delivery_task",
+            f"short_description={short_desc}^delivery_plan={plan_id}",
+            {"short_description": short_desc,
+             "description": description,
+             "delivery_plan": plan_id,
+             "expected_duration": "1970-01-02 00:00:00",
+             "order": order},
+            f"Delivery task: {short_desc}"
+        )
+    print()
+
+    # 4. Create catalog item with approval and execution plan
+    print("4. Setting up catalog item ...")
     cat_item_id = get_or_create(
         client, "sc_cat_item",
         "name=Bare Metal Server Request",
@@ -142,14 +176,16 @@ def main():
              "triggers an end-to-end workflow: iDRAC boot-to-ISO, unattended install, "
              "RHSM registration, and demo application deployment."
          ),
+         "approval": "manager",
+         "delivery_plan": plan_id,
          "active": "true",
          "ordered_item_link": "true"},
         "Bare Metal Server Request item"
     )
     print()
 
-    # 4. Create catalog item variables
-    print("4. Setting up order variables ...")
+    # 5. Create catalog item variables
+    print("5. Setting up order variables ...")
 
     variables = [
         {

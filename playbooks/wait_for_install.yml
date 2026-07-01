@@ -1,18 +1,33 @@
 ---
-- name: Update ServiceNow — OS installing
+- name: ServiceNow — Open "Install Operating System" task
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Post work note
+    - name: Find the Install task
       servicenow.itsm.api:
-        resource: sc_req_item
+        resource: sc_task
+        action: get
+        query:
+          request_item: "{{ snow_ritm_sys_id }}"
+          short_description: "Install Operating System"
+      register: snow_task
+      when: snow_ritm_sys_id is defined
+
+    - name: Set task to Work in Progress
+      servicenow.itsm.api:
+        resource: sc_task
         action: patch
-        sys_id: "{{ snow_ritm_sys_id }}"
+        sys_id: "{{ snow_task.record[0].sys_id }}"
         data:
           state: "2"
-          work_notes: "[Ansible Automation Platform] ISO boot successful — RHEL 9 unattended installation in progress."
-      when: snow_ritm_sys_id is defined
+          work_notes: "[AAP] ISO boot successful — RHEL 9 unattended installation in progress."
+      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
+
+    - name: Save task sys_id for later
+      ansible.builtin.set_fact:
+        snow_install_task_id: "{{ snow_task.record[0].sys_id }}"
+      when: snow_ritm_sys_id is defined and snow_task.record | length > 0
 
 - name: Wait for install to complete, detach ISO, and boot into RHEL 9
   hosts: idrac
@@ -89,3 +104,18 @@
           {{ ansible_distribution }} {{ ansible_distribution_version }},
           {{ ansible_processor_vcpus }} vCPUs,
           {{ ansible_memtotal_mb }} MB RAM
+
+- name: ServiceNow — Close "Install Operating System" task
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Close task
+      servicenow.itsm.api:
+        resource: sc_task
+        action: patch
+        sys_id: "{{ snow_install_task_id }}"
+        data:
+          state: "3"
+          work_notes: "[AAP] RHEL 9 installed and verified — server is online."
+      when: snow_install_task_id is defined
