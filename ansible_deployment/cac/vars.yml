@@ -192,7 +192,7 @@ controller_templates:
       - "T620 iDRAC"
       - "ServiceNow PDI"
 
-  - name: "Provision RHEL 9"
+  - name: "Boot RHEL 9 via iDRAC"
     description: "Boot Dell T620 to unattended RHEL 9 ISO via iDRAC BootToNetworkISO over NFS"
     organization: "Default"
     job_type: "run"
@@ -205,7 +205,7 @@ controller_templates:
       - "T620 iDRAC"
       - "ServiceNow PDI"
 
-  - name: "Wait for Install"
+  - name: "Wait for OS Install & Verify"
     description: "Wait for power off, detach virtual media, boot to disk, verify RHEL 9"
     organization: "Default"
     job_type: "run"
@@ -219,7 +219,7 @@ controller_templates:
       - "T620 SSH"
       - "ServiceNow PDI"
 
-  - name: "Configure RHEL 9"
+  - name: "Configure & Deploy Application"
     description: "Register with RHSM and deploy demo web application"
     organization: "Default"
     job_type: "run"
@@ -242,18 +242,18 @@ controller_workflows:
     organization: "Default"
     ask_variables_on_launch: true
     simplified_workflow_nodes:
-      - identifier: "Provision RHEL 9"
-        unified_job_template: "Provision RHEL 9"
+      - identifier: "Boot RHEL 9 via iDRAC"
+        unified_job_template: "Boot RHEL 9 via iDRAC"
         success_nodes:
-          - "Wait for Install"
+          - "Wait for OS Install & Verify"
 
-      - identifier: "Wait for Install"
-        unified_job_template: "Wait for Install"
+      - identifier: "Wait for OS Install & Verify"
+        unified_job_template: "Wait for OS Install & Verify"
         success_nodes:
-          - "Configure RHEL 9"
+          - "Configure & Deploy Application"
 
-      - identifier: "Configure RHEL 9"
-        unified_job_template: "Configure RHEL 9"
+      - identifier: "Configure & Deploy Application"
+        unified_job_template: "Configure & Deploy Application"
 
 # =============================================================================
 # Event-Driven Ansible — ServiceNow Integration
