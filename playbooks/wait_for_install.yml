@@ -1,36 +1,4 @@
 ---
-- name: ServiceNow — Waiting for OS install
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  tasks:
-    - name: Resolve SNOW vars from EDA event
-      ansible.builtin.set_fact:
-        snow_ritm_sys_id: "{{ ansible_eda.event.sys_id }}"
-        snow_ritm_number: "{{ ansible_eda.event.number }}"
-      when: snow_ritm_sys_id is not defined and ansible_eda is defined
-
-    - name: Find the task
-      servicenow.itsm.api_info:
-        resource: sc_task
-        sysparm_query: "request_item={{ snow_ritm_sys_id }}^short_description=Provision & Configure Server"
-      register: snow_task
-      when: snow_ritm_sys_id is defined
-
-    - name: Save task sys_id
-      ansible.builtin.set_fact:
-        snow_task_id: "{{ snow_task.record[0].sys_id }}"
-      when: snow_ritm_sys_id is defined and (snow_task.record | default([])) | length > 0
-
-    - name: Post progress
-      servicenow.itsm.api:
-        resource: sc_task
-        action: patch
-        sys_id: "{{ snow_task_id }}"
-        data:
-          work_notes: "[AAP] Waiting for RHEL 9 installation to complete."
-      when: snow_task_id is defined
-
 - name: Wait for install to complete, detach ISO, and boot into RHEL 9
   hosts: idrac
   gather_facts: false
@@ -112,11 +80,29 @@
   connection: local
   gather_facts: false
   tasks:
+    - name: Resolve SNOW vars from EDA event
+      ansible.builtin.set_fact:
+        snow_ritm_sys_id: "{{ ansible_eda.event.sys_id }}"
+        snow_ritm_number: "{{ ansible_eda.event.number }}"
+      when: snow_ritm_sys_id is not defined and ansible_eda is defined
+
+    - name: Find the task
+      servicenow.itsm.api_info:
+        resource: sc_task
+        sysparm_query: "request_item={{ snow_ritm_sys_id }}^short_description=Provision & Configure Server"
+      register: snow_task
+      when: snow_ritm_sys_id is defined
+
+    - name: Save task sys_id
+      ansible.builtin.set_fact:
+        snow_task_id: "{{ snow_task.record[0].sys_id }}"
+      when: snow_ritm_sys_id is defined and (snow_task.record | default([])) | length > 0
+
     - name: Post progress
       servicenow.itsm.api:
         resource: sc_task
         action: patch
         sys_id: "{{ snow_task_id }}"
         data:
-          work_notes: "[AAP] RHEL 9 installed and verified — server is online. Starting configuration."
+          work_notes: "[AAP] RHEL 9 installed and verified — server is online"
       when: snow_task_id is defined

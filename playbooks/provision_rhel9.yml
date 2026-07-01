@@ -68,16 +68,3 @@
       ansible.builtin.debug:
         var: osd_result
 
-- name: ServiceNow — ISO boot complete
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  tasks:
-    - name: Post progress
-      servicenow.itsm.api:
-        resource: sc_task
-        action: patch
-        sys_id: "{{ snow_task_id }}"
-        data:
-          work_notes: "[AAP] ISO boot complete — RHEL 9 unattended installation in progress."
-      when: snow_task_id is defined
